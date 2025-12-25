@@ -1,0 +1,15 @@
+[submodule "engines/custom"]
+	path = engines/custom
+	url = https://github.com/aurceive/gcsim.git
+	branch = custom
+	shallow = true
+[submodule "engines/gcsim"]
+	path = engines/gcsim
+	url = https://github.com/genshinsim/gcsim.git
+	branch = main
+	shallow = true
+[submodule "engines/wfpsim"]
+	path = engines/wfpsim
+	url = https://github.com/ancientdialogue/wfpsim.git
+	branch = develop
+	shallow = true

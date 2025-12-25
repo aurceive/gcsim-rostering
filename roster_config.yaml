@@ -1,0 +1,38 @@
+engine: gcsim
+# engine: wfpsim
+# engine: custom
+
+char: fischl
+roster_name: fischl перегрузки
+minimum_weapon_rarity: 5
+target:
+  - personal_dps
+#  - team_dps
+main_stats:
+  sands:
+    # - er=0.518
+    # - em=187
+    - atk%=0.466
+    # - hp%=0.466
+    # - def%=0.466
+  goblet:
+    # - em=187
+    # - atk%=0.466
+    # - hp%=0.466
+    # - def%=0.466
+    - electro%=0.466
+    # - pyro%=0.466
+    # - hydro%=0.466
+    # - cryo%=0.466
+    # - anemo%=0.466
+    # - geo%=0.466
+    # - dendro%=0.466
+    # - phys%=0.466
+  circlet:
+    # - em=187
+    - cr=0.311
+    - cd=0.622
+    # - atk%=0.466
+    # - hp%=0.466
+    # - def%=0.466
+    # - heal=0.359

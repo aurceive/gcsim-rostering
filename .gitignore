@@ -1,1 +1,1 @@
-﻿# Ignore everything by default\r\n*\r\n!.gitmodules\r\n!.gitignore\r\n!README.md\r\n
+﻿WEAPON_*_refines.yaml
