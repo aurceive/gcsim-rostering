@@ -6,8 +6,10 @@
 
 ## Сборка и запуск (из корня репозитория)
 
-- Сборка: `go -C app build -o app/roster.exe .`
-- Запуск: `./app/roster.exe`
+- Сборка:
+  go -C app build -o roster.exe .
+- Запуск:
+  app/roster.exe
 
 ## Выбор активного движка
 

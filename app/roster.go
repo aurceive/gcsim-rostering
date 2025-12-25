@@ -17,6 +17,24 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var allowedWeaponSources = map[string]struct{}{
+	"Стандартная молитва": {},
+	"Магазин Паймон":      {},
+	"Ковка":               {},
+	"Ивент":               {},
+	"Ивентовая оружейная молитва": {},
+	"БП":      {},
+	"ПС5":     {},
+	"Квесты":  {},
+	"Рыбалка": {},
+}
+
+var refineAllowsR1R5Sources = map[string]struct{}{
+	"БП": {},
+	"Ивентовая оружейная молитва": {},
+	"Магазин Паймон":              {},
+}
+
 type Config struct {
 	Engine              string   `yaml:"engine"`
 	EnginePath          string   `yaml:"engine_path"`
@@ -57,6 +75,77 @@ type Result struct {
 	CharDps   int
 	Er        float64
 	MainStats string
+}
+
+func loadWeaponSources(appRoot string) (map[string][]string, string, error) {
+	path := filepath.Join(appRoot, "weapon_sources_ru.yaml")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string][]string{}, path, nil
+		}
+		return nil, path, err
+	}
+	out := make(map[string][]string)
+	if err := yaml.Unmarshal(b, &out); err != nil {
+		return nil, path, err
+	}
+	return out, path, nil
+}
+
+func validateWeaponSources(sourcesByWeapon map[string][]string) error {
+	for key, sources := range sourcesByWeapon {
+		for _, s := range sources {
+			if _, ok := allowedWeaponSources[s]; !ok {
+				return fmt.Errorf("weapon_sources_ru.yaml: weapon=%q has unsupported source=%q", key, s)
+			}
+		}
+	}
+	return nil
+}
+
+func appendWeaponSourceStubs(filePath string, stubs []string) error {
+	if len(stubs) == 0 {
+		return nil
+	}
+	// Ensure we separate from last line.
+	b, err := os.ReadFile(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Create the file.
+			return os.WriteFile(filePath, []byte(strings.Join(stubs, "\n")), 0o644)
+		}
+		return err
+	}
+	prefix := ""
+	if len(b) > 0 && b[len(b)-1] != '\n' {
+		prefix = "\n"
+	}
+	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.WriteString(prefix + strings.Join(stubs, "\n") + "\n")
+	return err
+}
+
+func refinesForWeapon(w Weapon, sources []string) []int {
+	// Правила пробуждений касаются только 4*.
+	if w.Rarity == 4 {
+		// По умолчанию: r1 и r5, но если есть любой источник кроме
+		// (БП, Ивентовая оружейная молитва, Магазин Паймон) -> только r5.
+		for _, s := range sources {
+			if _, ok := refineAllowsR1R5Sources[s]; !ok {
+				return []int{5}
+			}
+		}
+		return []int{1, 5}
+	}
+	if w.Rarity == 5 {
+		return []int{1}
+	}
+	return []int{5}
 }
 
 func findAppRoot() (string, error) {
@@ -133,66 +222,6 @@ func updateStatsInLine(line string, char string, mainStats string) (string, bool
 	return newLine, true
 }
 
-func writeRefineFile(refineFile string, existingRefines map[string][]int, added []string, weaponData WeaponData, weaponNames map[string]string) {
-	// prepare sorted keys: known weapons sorted by rarity desc, others alphabetical
-	allKeys := make([]string, 0, len(existingRefines))
-	for k := range existingRefines {
-		allKeys = append(allKeys, k)
-	}
-	sort.SliceStable(allKeys, func(i, j int) bool {
-		r1 := -1
-		r2 := -1
-		if w, ok := weaponData.Data[allKeys[i]]; ok {
-			r1 = w.Rarity
-		}
-		if w, ok := weaponData.Data[allKeys[j]]; ok {
-			r2 = w.Rarity
-		}
-		if r1 != r2 {
-			return r1 > r2
-		}
-		return allKeys[i] < allKeys[j]
-	})
-
-	fout, ferr := os.Create(refineFile)
-	if ferr != nil {
-		fmt.Printf("Warning: cannot write refine file %s: %v\n", refineFile, ferr)
-		return
-	}
-	defer fout.Close()
-
-	for _, k := range allKeys {
-		rus := weaponNames[k]
-		if rus == "" {
-			fmt.Fprintf(fout, "# %s\n", k)
-		} else {
-			fmt.Fprintf(fout, "# %s\n", rus)
-		}
-		vals := existingRefines[k]
-		// format vals as YAML list
-		var valStr string
-		if len(vals) == 0 {
-			valStr = "[]"
-		} else {
-			parts := make([]string, 0, len(vals))
-			for _, v := range vals {
-				parts = append(parts, fmt.Sprintf("%d", v))
-			}
-			valStr = "[" + strings.Join(parts, ",") + "]"
-		}
-		fmt.Fprintf(fout, "%s: %s\n", k, valStr)
-	}
-
-	// notify about added weapons
-	for _, a := range added {
-		name := a
-		if n, ok := weaponNames[a]; ok {
-			name = n
-		}
-		fmt.Printf("Added to %s: %s\n", refineFile, name)
-	}
-}
-
 func main() {
 	appRoot, err := findAppRoot()
 	if err != nil {
@@ -256,6 +285,15 @@ func main() {
 	}
 	weaponNames := namesData["Russian"]["weapon_names"]
 
+	// Read weapon_sources_ru.yaml for weapon source data
+	weaponSources, weaponSourcesPath, err := loadWeaponSources(appRoot)
+	if err != nil {
+		panic(err)
+	}
+	if err := validateWeaponSources(weaponSources); err != nil {
+		panic(err)
+	}
+
 	char := cfg.Char
 
 	// Parse config to find character order
@@ -312,53 +350,52 @@ func main() {
 	}
 	fmt.Printf("minimum_weapon_rarity=%d: %d included, %d excluded\n", minR, len(weapons), len(excluded))
 
-	// Generate or update <weaponClass>_refines.yaml in rostering
-	refineFile := filepath.Join(appRoot, fmt.Sprintf("%s_refines.yaml", weaponClass))
-	existingRefines := make(map[string][]int)
-	if b, err := os.ReadFile(refineFile); err == nil {
-		// try to unmarshal existing YAML (ignore errors)
-		_ = yaml.Unmarshal(b, &existingRefines)
-	}
-
-	// Build effectiveRefines: which weapons+refines we will actually run.
-	effectiveRefines := make(map[string][]int)
-	var added []string
+	// В weapon_sources_ru.yaml поддерживаются только 4* оружия.
+	// Поэтому автодобавление и проверка на пустой список делаются только для 4*.
+	var missing []string
+	var empty []string
+	stubs := make([]string, 0)
 	for _, w := range weapons {
-		if vals, ok := existingRefines[w]; ok {
-			// if explicitly present with empty list -> skip this weapon entirely
-			if len(vals) == 0 {
-				continue
-			}
-			effectiveRefines[w] = vals
+		wd, ok := weaponData.Data[w]
+		if !ok {
+			panic(fmt.Sprintf("weapon %s not found in weapon data", w))
+		}
+		if wd.Rarity != 4 {
 			continue
 		}
-		// not present: add with defaults based on rarity
-		def := []int{5}
-		if wd, ok := weaponData.Data[w]; ok {
-			switch wd.Rarity {
-			case 5:
-				def = []int{1}
-			case 4:
-				def = []int{1, 5}
-			default:
-				def = []int{5}
+		s, ok := weaponSources[w]
+		if !ok {
+			missing = append(missing, w)
+			name := weaponNames[w]
+			if name == "" {
+				name = w
 			}
+			stubs = append(stubs, fmt.Sprintf("# %s\n%s: []\n", name, w))
+			continue
 		}
-		existingRefines[w] = def
-		effectiveRefines[w] = def
-		added = append(added, w)
+		if len(s) == 0 {
+			empty = append(empty, w)
+		}
 	}
-
-	// If any were added, write the file (preserve union of keys)
-	if len(added) > 0 {
-		writeRefineFile(refineFile, existingRefines, added, weaponData, weaponNames)
+	if err := appendWeaponSourceStubs(weaponSourcesPath, stubs); err != nil {
+		panic(err)
+	}
+	if len(missing) > 0 || len(empty) > 0 {
+		sort.Strings(missing)
+		sort.Strings(empty)
+		if len(missing) > 0 {
+			fmt.Printf("weapon_sources_ru.yaml: добавлены заглушки для %d оружий (key: [])\n", len(missing))
+		}
+		if len(empty) > 0 {
+			fmt.Printf("weapon_sources_ru.yaml: найдено %d оружий с пустым списком источников\n", len(empty))
+		}
+		fmt.Println("Заполните источники в", weaponSourcesPath, "и перезапустите программу.")
+		os.Exit(0)
 	}
 
 	// Prepare list of weapons we will run (sorted by rarity desc then key)
-	weaponsToRun := make([]string, 0, len(effectiveRefines))
-	for k := range effectiveRefines {
-		weaponsToRun = append(weaponsToRun, k)
-	}
+	weaponsToRun := make([]string, 0, len(weapons))
+	weaponsToRun = append(weaponsToRun, weapons...)
 	sort.SliceStable(weaponsToRun, func(i, j int) bool {
 		r1 := -1
 		r2 := -1
@@ -391,18 +428,26 @@ func main() {
 	// totalRuns = sum over weapons of (#refines * #mainStatCombos)
 	totalRuns := 0
 	for _, w := range weaponsToRun {
-		totalRuns += len(effectiveRefines[w]) * len(mainStatCombos)
+		wd, ok := weaponData.Data[w]
+		if !ok {
+			panic(fmt.Sprintf("weapon %s not found in weapon data", w))
+		}
+		totalRuns += len(refinesForWeapon(wd, weaponSources[w])) * len(mainStatCombos)
 	}
 	completed := 0
 	start := time.Now()
 
 	for _, weapon := range weaponsToRun {
+		wd, ok := weaponData.Data[weapon]
+		if !ok {
+			panic(fmt.Sprintf("weapon %s not found in weapon data", weapon))
+		}
 		var bestTeamDps int
 		var bestCharDps int
 		var bestEr float64
 		var bestMainStats string
 		// iterate refines for this weapon
-		for _, ref := range effectiveRefines[weapon] {
+		for _, ref := range refinesForWeapon(wd, weaponSources[weapon]) {
 			// for each refine, find best mainStats
 			bestTeamDps = 0
 			bestCharDps = 0
