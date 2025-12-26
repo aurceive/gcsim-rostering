@@ -1,20 +1,22 @@
-package weaponroster
+package weaponroster_test
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/weaponroster"
 )
 
 func TestEnsureWeaponSourcesReady_Missing4Star_AddsStubAndStops(t *testing.T) {
 	weapons := []string{"w4"}
-	wd := WeaponData{Data: map[string]Weapon{"w4": {Key: "w4", Rarity: 4}}}
+	wd := weaponroster.WeaponData{Data: map[string]weaponroster.Weapon{"w4": {Key: "w4", Rarity: 4}}}
 	names := map[string]string{"w4": "Имя"}
 	sources := map[string][]string{}
 
 	path := filepath.Join(t.TempDir(), "weapon_sources_ru.yaml")
-	ok, err := ensureWeaponSourcesReady(weapons, wd, names, sources, path)
+	ok, err := weaponroster.EnsureWeaponSourcesReady(weapons, wd, names, sources, path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
