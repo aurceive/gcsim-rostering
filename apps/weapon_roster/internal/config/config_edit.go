@@ -1,4 +1,4 @@
-package weaponroster
+package config
 
 import (
 	"fmt"

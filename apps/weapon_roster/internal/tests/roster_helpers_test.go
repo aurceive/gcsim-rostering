@@ -3,18 +3,20 @@ package weaponroster_test
 import (
 	"testing"
 
-	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/weaponroster"
+	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/config"
+	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/domain"
+	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/weapons"
 )
 
 func TestParseCharOrder(t *testing.T) {
-	config := "" +
+	configText := "" +
 		"a char lvl=90\n" +
 		"a add weapon=\"x\" refine=1\n" +
 		"b char lvl=80\n" +
 		"c char lvl=90\n" +
 		"notachar something\n"
 
-	got := weaponroster.ParseCharOrder(config)
+	got := config.ParseCharOrder(configText)
 	want := []string{"a", "b", "c"}
 	if len(got) != len(want) {
 		t.Fatalf("expected %d chars, got %d: %#v", len(want), len(got), got)
@@ -28,21 +30,21 @@ func TestParseCharOrder(t *testing.T) {
 
 func TestFindCharIndex(t *testing.T) {
 	order := []string{"a", "b", "c"}
-	if got := weaponroster.FindCharIndex(order, "b"); got != 1 {
+	if got := config.FindCharIndex(order, "b"); got != 1 {
 		t.Fatalf("expected 1, got %d", got)
 	}
-	if got := weaponroster.FindCharIndex(order, "missing"); got != -1 {
+	if got := config.FindCharIndex(order, "missing"); got != -1 {
 		t.Fatalf("expected -1, got %d", got)
 	}
 }
 
 func TestBuildMainStatCombos(t *testing.T) {
-	var cfg weaponroster.Config
+	var cfg domain.Config
 	cfg.MainStats.Sands = []string{"atk%=0.466"}
 	cfg.MainStats.Goblet = []string{"pyro%=0.466", "dendro%=0.466"}
 	cfg.MainStats.Circlet = []string{"cr=0.311"}
 
-	got := weaponroster.BuildMainStatCombos(cfg)
+	got := config.BuildMainStatCombos(cfg)
 	if len(got) != 2 {
 		t.Fatalf("expected 2 combos, got %d: %#v", len(got), got)
 	}
@@ -52,33 +54,33 @@ func TestBuildMainStatCombos(t *testing.T) {
 }
 
 func TestValidateWeaponSources_RejectsUnknownSource(t *testing.T) {
-	err := weaponroster.ValidateWeaponSources(map[string][]string{"w": {"НЕИЗВЕСТНО"}})
+	err := weapons.ValidateSources(map[string][]string{"w": {"НЕИЗВЕСТНО"}})
 	if err == nil {
 		t.Fatalf("expected error")
 	}
 }
 
 func TestRefinesForWeapon(t *testing.T) {
-	w4 := weaponroster.Weapon{Key: "x", Rarity: 4}
-	if got := weaponroster.RefinesForWeapon(w4, []string{"БП"}); len(got) != 2 || got[0] != 1 || got[1] != 5 {
+	w4 := domain.Weapon{Key: "x", Rarity: 4}
+	if got := weapons.RefinesForWeapon(w4, []string{"БП"}); len(got) != 2 || got[0] != 1 || got[1] != 5 {
 		t.Fatalf("expected [1 5], got %#v", got)
 	}
-	if got := weaponroster.RefinesForWeapon(w4, []string{"Ковка"}); len(got) != 1 || got[0] != 5 {
+	if got := weapons.RefinesForWeapon(w4, []string{"Ковка"}); len(got) != 1 || got[0] != 5 {
 		t.Fatalf("expected [5], got %#v", got)
 	}
-	w5 := weaponroster.Weapon{Key: "y", Rarity: 5}
-	if got := weaponroster.RefinesForWeapon(w5, nil); len(got) != 1 || got[0] != 1 {
+	w5 := domain.Weapon{Key: "y", Rarity: 5}
+	if got := weapons.RefinesForWeapon(w5, nil); len(got) != 1 || got[0] != 1 {
 		t.Fatalf("expected [1], got %#v", got)
 	}
 }
 
 func TestSelectWeaponsByClassAndRarity(t *testing.T) {
-	wd := weaponroster.WeaponData{Data: map[string]weaponroster.Weapon{
+	wd := domain.WeaponData{Data: map[string]domain.Weapon{
 		"a": {Key: "a", WeaponClass: "claymore", Rarity: 3},
 		"b": {Key: "b", WeaponClass: "claymore", Rarity: 4},
 		"c": {Key: "c", WeaponClass: "sword", Rarity: 5},
 	}}
-	inc, exc := weaponroster.SelectWeaponsByClassAndRarity(wd, "claymore", 4)
+	inc, exc := weapons.SelectByClassAndRarity(wd, "claymore", 4)
 	if len(inc) != 1 || inc[0] != "b" {
 		t.Fatalf("expected included=[b], got %#v", inc)
 	}
@@ -88,12 +90,12 @@ func TestSelectWeaponsByClassAndRarity(t *testing.T) {
 }
 
 func TestSortWeaponsByRarityDescThenKey(t *testing.T) {
-	wd := weaponroster.WeaponData{Data: map[string]weaponroster.Weapon{
+	wd := domain.WeaponData{Data: map[string]domain.Weapon{
 		"b": {Key: "b", WeaponClass: "x", Rarity: 4},
 		"a": {Key: "a", WeaponClass: "x", Rarity: 4},
 		"c": {Key: "c", WeaponClass: "x", Rarity: 5},
 	}}
-	got := weaponroster.SortWeaponsByRarityDescThenKey([]string{"b", "c", "a"}, wd)
+	got := weapons.SortByRarityDescThenKey([]string{"b", "c", "a"}, wd)
 	want := []string{"c", "a", "b"}
 	if len(got) != len(want) {
 		t.Fatalf("expected %d, got %d: %#v", len(want), len(got), got)
@@ -106,7 +108,7 @@ func TestSortWeaponsByRarityDescThenKey(t *testing.T) {
 }
 
 func TestComputeTotalRuns(t *testing.T) {
-	wd := weaponroster.WeaponData{Data: map[string]weaponroster.Weapon{
+	wd := domain.WeaponData{Data: map[string]domain.Weapon{
 		"w4": {Key: "w4", WeaponClass: "x", Rarity: 4},
 		"w5": {Key: "w5", WeaponClass: "x", Rarity: 5},
 	}}
@@ -116,7 +118,7 @@ func TestComputeTotalRuns(t *testing.T) {
 	}
 	combos := []string{"c1", "c2", "c3"}
 	// w4 -> [1 5] => 2, w5 -> [1] => 1 => total (2+1)*3=9
-	total, ok := weaponroster.ComputeTotalRuns([]string{"w4", "w5"}, wd, sources, combos)
+	total, ok := weapons.ComputeTotalRuns([]string{"w4", "w5"}, wd, sources, combos)
 	if !ok {
 		t.Fatalf("expected ok")
 	}
@@ -126,20 +128,20 @@ func TestComputeTotalRuns(t *testing.T) {
 }
 
 func TestParseTarget(t *testing.T) {
-	if got, err := weaponroster.ParseTarget(nil); err != nil || got != weaponroster.TargetCharDps {
+	if got, err := domain.ParseTarget(nil); err != nil || got != domain.TargetCharDps {
 		t.Fatalf("expected default char_dps, got=%v err=%v", got, err)
 	}
-	if got, err := weaponroster.ParseTarget([]string{"char_dps"}); err != nil || got != weaponroster.TargetCharDps {
+	if got, err := domain.ParseTarget([]string{"char_dps"}); err != nil || got != domain.TargetCharDps {
 		t.Fatalf("expected char_dps, got=%v err=%v", got, err)
 	}
-	if got, err := weaponroster.ParseTarget([]string{"team_dps"}); err != nil || got != weaponroster.TargetTeamDps {
+	if got, err := domain.ParseTarget([]string{"team_dps"}); err != nil || got != domain.TargetTeamDps {
 		t.Fatalf("expected team_dps, got=%v err=%v", got, err)
 	}
 	// Preserve old behavior: team_dps has precedence if both appear.
-	if got, err := weaponroster.ParseTarget([]string{"char_dps", "team_dps"}); err != nil || got != weaponroster.TargetTeamDps {
+	if got, err := domain.ParseTarget([]string{"char_dps", "team_dps"}); err != nil || got != domain.TargetTeamDps {
 		t.Fatalf("expected team_dps precedence, got=%v err=%v", got, err)
 	}
-	if _, err := weaponroster.ParseTarget([]string{"unknown"}); err == nil {
+	if _, err := domain.ParseTarget([]string{"unknown"}); err == nil {
 		t.Fatalf("expected error for unknown target")
 	}
 }

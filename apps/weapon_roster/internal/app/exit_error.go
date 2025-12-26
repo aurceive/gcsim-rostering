@@ -1,4 +1,4 @@
-package weaponroster
+package app
 
 type ExitError struct {
 	Code int

@@ -1,8 +1,12 @@
-package weaponroster
+package weapons
 
-import "sort"
+import (
+	"sort"
 
-func selectWeaponsByClassAndRarity(weaponData WeaponData, weaponClass string, minRarity int) (included []string, excluded []string) {
+	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/domain"
+)
+
+func SelectByClassAndRarity(weaponData domain.WeaponData, weaponClass string, minRarity int) (included []string, excluded []string) {
 	for key, w := range weaponData.Data {
 		if w.WeaponClass != weaponClass {
 			continue
@@ -16,7 +20,7 @@ func selectWeaponsByClassAndRarity(weaponData WeaponData, weaponClass string, mi
 	return included, excluded
 }
 
-func sortWeaponsByRarityDescThenKey(weapons []string, weaponData WeaponData) []string {
+func SortByRarityDescThenKey(weapons []string, weaponData domain.WeaponData) []string {
 	out := make([]string, 0, len(weapons))
 	out = append(out, weapons...)
 	sort.SliceStable(out, func(i, j int) bool {
@@ -36,14 +40,14 @@ func sortWeaponsByRarityDescThenKey(weapons []string, weaponData WeaponData) []s
 	return out
 }
 
-func computeTotalRuns(weaponsToRun []string, weaponData WeaponData, weaponSources map[string][]string, mainStatCombos []string) (int, bool) {
+func ComputeTotalRuns(weaponsToRun []string, weaponData domain.WeaponData, weaponSources map[string][]string, mainStatCombos []string) (int, bool) {
 	totalRuns := 0
 	for _, w := range weaponsToRun {
 		wd, ok := weaponData.Data[w]
 		if !ok {
 			return 0, false
 		}
-		totalRuns += len(refinesForWeapon(wd, weaponSources[w])) * len(mainStatCombos)
+		totalRuns += len(RefinesForWeapon(wd, weaponSources[w])) * len(mainStatCombos)
 	}
 	return totalRuns, true
 }

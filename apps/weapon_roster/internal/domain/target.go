@@ -1,4 +1,4 @@
-package weaponroster
+package domain
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ const (
 	TargetTeamDps
 )
 
-func parseTarget(target []string) (Target, error) {
+func ParseTarget(target []string) (Target, error) {
 	// Preserve old behavior: if team_dps isn't present, we default to char_dps.
 	if len(target) == 0 {
 		return TargetCharDps, nil

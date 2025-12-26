@@ -1,19 +1,21 @@
-package weaponroster
+package output
 
 import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/domain"
 )
 
-func printResults(results []Result, weaponNames map[string]string, weaponSources map[string][]string, target Target) {
+func PrintResults(results []domain.Result, weaponNames map[string]string, weaponSources map[string][]string, target domain.Target) {
 	if len(results) == 0 {
 		fmt.Println("No results")
 		return
 	}
 
 	sortKey := "char_dps"
-	if target == TargetTeamDps {
+	if target == domain.TargetTeamDps {
 		sortKey = "team_dps"
 	}
 	fmt.Println("Results (sorted by", sortKey+"):")

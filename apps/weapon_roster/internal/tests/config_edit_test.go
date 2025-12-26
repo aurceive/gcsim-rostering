@@ -3,7 +3,7 @@ package weaponroster_test
 import (
 	"testing"
 
-	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/weaponroster"
+	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/config"
 )
 
 func TestEditConfig_ReplacesWeaponAndStats_PreservesTail(t *testing.T) {
@@ -13,7 +13,7 @@ func TestEditConfig_ReplacesWeaponAndStats_PreservesTail(t *testing.T) {
 		"diluc add stats hp=4780 atk=311 pyro%=0.466 cr=0.311 cd=0.622 ; tail stays\n" +
 		"other add weapon=\"x\" refine=1\n"
 
-	out, err := weaponroster.EditConfig(input, "diluc", "serpentspine", 1, "atk%=0.466 cr=0.311 cd=0.622")
+	out, err := config.EditConfig(input, "diluc", "serpentspine", 1, "atk%=0.466 cr=0.311 cd=0.622")
 	if err != nil {
 		t.Fatalf("EditConfig returned error: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestEditConfig_StatsHpTokenMismatch_NoReplace(t *testing.T) {
 		"diluc add weapon=\"wgs\" refine=5\n" +
 		"diluc add stats hp=4000 atk=311 pyro%=0.466 cr=0.311 cd=0.622\n"
 
-	_, err := weaponroster.EditConfig(input, "diluc", "wgs", 1, "atk%=0.466 cr=0.311 cd=0.622")
+	_, err := config.EditConfig(input, "diluc", "wgs", 1, "atk%=0.466 cr=0.311 cd=0.622")
 	if err == nil {
 		t.Fatalf("expected error when stats line is not eligible for replacement")
 	}
@@ -47,7 +47,7 @@ func TestEditConfig_MainStatsTooShort_ReturnsError(t *testing.T) {
 		"diluc add weapon=\"wgs\" refine=5\n" +
 		"diluc add stats hp=4780 atk=311 pyro%=0.466 cr=0.311 cd=0.622\n"
 
-	_, err := weaponroster.EditConfig(input, "diluc", "wgs", 1, "atk%=0.466 cr=0.311")
+	_, err := config.EditConfig(input, "diluc", "wgs", 1, "atk%=0.466 cr=0.311")
 	if err == nil {
 		t.Fatalf("expected error for too-short mainStats")
 	}
@@ -57,7 +57,7 @@ func TestEditConfig_WeaponLineNotFound_ReturnsError(t *testing.T) {
 	input := "" +
 		"diluc add stats hp=4780 atk=311 pyro%=0.466 cr=0.311 cd=0.622\n"
 
-	_, err := weaponroster.EditConfig(input, "diluc", "wgs", 1, "atk%=0.466 cr=0.311 cd=0.622")
+	_, err := config.EditConfig(input, "diluc", "wgs", 1, "atk%=0.466 cr=0.311 cd=0.622")
 	if err == nil {
 		t.Fatalf("expected error when weapon line is missing")
 	}

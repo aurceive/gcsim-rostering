@@ -1,14 +1,16 @@
-package weaponroster
+package weapons
 
 import (
 	"fmt"
 	"sort"
+
+	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/domain"
 )
 
 // ensureWeaponSourcesReady validates weapon_sources_ru.yaml coverage for the given weapons.
 // It may append stubs to weaponSourcesPath. If required data is missing or empty,
 // it prints instructions and returns false to indicate the caller should stop.
-func ensureWeaponSourcesReady(weapons []string, weaponData WeaponData, weaponNames map[string]string, weaponSources map[string][]string, weaponSourcesPath string) (bool, error) {
+func EnsureSourcesReady(weapons []string, weaponData domain.WeaponData, weaponNames map[string]string, weaponSources map[string][]string, weaponSourcesPath string) (bool, error) {
 	// В weapon_sources_ru.yaml поддерживаются только 4* оружия.
 	// Поэтому автодобавление и проверка на пустой список делаются только для 4*.
 	var missing []string

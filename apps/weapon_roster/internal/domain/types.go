@@ -1,24 +1,6 @@
-package weaponroster
+package domain
 
 import "gopkg.in/yaml.v3"
-
-var allowedWeaponSources = map[string]struct{}{
-	"Стандартная молитва": {},
-	"Магазин Паймон":      {},
-	"Ковка":               {},
-	"Ивент":               {},
-	"Ивентовая оружейная молитва": {},
-	"БП":      {},
-	"ПС5":     {},
-	"Квесты":  {},
-	"Рыбалка": {},
-}
-
-var refineAllowsR1R5Sources = map[string]struct{}{
-	"БП": {},
-	"Ивентовая оружейная молитва": {},
-	"Магазин Паймон":              {},
-}
 
 type Config struct {
 	Engine              string   `yaml:"engine"`

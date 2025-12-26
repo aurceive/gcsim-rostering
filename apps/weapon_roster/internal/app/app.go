@@ -1,4 +1,4 @@
-package weaponroster
+package app
 
 import (
 	"context"
@@ -7,12 +7,19 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/config"
+	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/domain"
+	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/engine"
+	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/output"
+	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/sim"
+	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/weapons"
+
 	"gopkg.in/yaml.v3"
 )
 
 // Run executes the roster optimization flow and returns the desired process exit code.
 func Run() int {
-	appRoot, err := findAppRoot()
+	appRoot, err := FindRoot()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -40,7 +47,7 @@ func run(appRoot string) error {
 	configStr := string(configBytes)
 
 	// Read roster_config.yaml
-	var cfg Config
+	var cfg domain.Config
 	yamlBytes, err := os.ReadFile(filepath.Join(appRoot, "roster_config.yaml"))
 	if err != nil {
 		return fmt.Errorf("read roster_config.yaml: %w", err)
@@ -50,35 +57,32 @@ func run(appRoot string) error {
 		return fmt.Errorf("parse roster_config.yaml: %w", err)
 	}
 
-	engineRoot, err := resolveEngineRoot(appRoot, cfg)
+	engineRoot, err := engine.ResolveRoot(appRoot, cfg)
 	if err != nil {
 		return err
 	}
 
-	data, err := loadEngineData(engineRoot)
+	weaponNames, weaponData, charData, err := engine.LoadData(engineRoot)
 	if err != nil {
 		return fmt.Errorf("load engine data: %w", err)
 	}
-	weaponNames := data.weaponNames
-	weaponData := data.weaponData
-	charData := data.charData
 
 	// Read weapon_sources_ru.yaml for weapon source data
-	weaponSources, weaponSourcesPath, err := loadWeaponSources(appRoot)
+	weaponSources, weaponSourcesPath, err := weapons.LoadSources(appRoot)
 	if err != nil {
 		return fmt.Errorf("load weapon sources: %w", err)
 	}
-	if err := validateWeaponSources(weaponSources); err != nil {
+	if err := weapons.ValidateSources(weaponSources); err != nil {
 		return err
 	}
 
 	char := cfg.Char
 
 	// Parse config to find character order
-	charOrder := parseCharOrder(configStr)
+	charOrder := config.ParseCharOrder(configStr)
 
 	// Find charIndex
-	charIndex := findCharIndex(charOrder, char)
+	charIndex := config.FindCharIndex(charOrder, char)
 	if charIndex == -1 {
 		return fmt.Errorf("character %s not found in config", char)
 	}
@@ -97,10 +101,10 @@ func run(appRoot string) error {
 	if minR <= 0 {
 		minR = 3
 	}
-	weapons, excluded := selectWeaponsByClassAndRarity(weaponData, weaponClass, minR)
-	fmt.Printf("minimum_weapon_rarity=%d: %d included, %d excluded\n", minR, len(weapons), len(excluded))
+	weaponsToConsider, excluded := weapons.SelectByClassAndRarity(weaponData, weaponClass, minR)
+	fmt.Printf("minimum_weapon_rarity=%d: %d included, %d excluded\n", minR, len(weaponsToConsider), len(excluded))
 
-	ready, err := ensureWeaponSourcesReady(weapons, weaponData, weaponNames, weaponSources, weaponSourcesPath)
+	ready, err := weapons.EnsureSourcesReady(weaponsToConsider, weaponData, weaponNames, weaponSources, weaponSourcesPath)
 	if err != nil {
 		return err
 	}
@@ -110,12 +114,12 @@ func run(appRoot string) error {
 	}
 
 	// Prepare list of weapons we will run (sorted by rarity desc then key)
-	weaponsToRun := sortWeaponsByRarityDescThenKey(weapons, weaponData)
+	weaponsToRun := weapons.SortByRarityDescThenKey(weaponsToConsider, weaponData)
 
 	// Generate main stat combinations
-	mainStatCombos := buildMainStatCombos(cfg)
+	mainStatCombos := config.BuildMainStatCombos(cfg)
 
-	target, err := parseTarget(cfg.Target)
+	target, err := domain.ParseTarget(cfg.Target)
 	if err != nil {
 		return err
 	}
@@ -126,14 +130,14 @@ func run(appRoot string) error {
 	}
 	tempConfig := filepath.Join(workDir, "temp_config.txt")
 
-	runner := GcsimRunner{}
+	runner := sim.GcsimRunner{}
 
 	// Results
-	var results []Result
+	var results []domain.Result
 
 	// Prepare progress tracking
 	// totalRuns = sum over weapons of (#refines * #mainStatCombos)
-	totalRuns, ok := computeTotalRuns(weaponsToRun, weaponData, weaponSources, mainStatCombos)
+	totalRuns, ok := weapons.ComputeTotalRuns(weaponsToRun, weaponData, weaponSources, mainStatCombos)
 	if !ok {
 		return fmt.Errorf("failed to compute total runs: weapon not found in weapon data")
 	}
@@ -150,14 +154,14 @@ func run(appRoot string) error {
 		var bestEr float64
 		var bestMainStats string
 		// iterate refines for this weapon
-		for _, ref := range refinesForWeapon(wd, weaponSources[weapon]) {
+		for _, ref := range weapons.RefinesForWeapon(wd, weaponSources[weapon]) {
 			// for each refine, find best mainStats
 			bestTeamDps = 0
 			bestCharDps = 0
 			bestEr = 0
 			bestMainStats = ""
 			for _, mainStats := range mainStatCombos {
-				newConfig, err := EditConfig(configStr, char, weapon, ref, mainStats)
+				newConfig, err := config.EditConfig(configStr, char, weapon, ref, mainStats)
 				if err != nil {
 					return err
 				}
@@ -180,7 +184,7 @@ func run(appRoot string) error {
 				er := res.CharacterDetails[charIndex].Stats[7] // ER index (текущее поведение сохраняем)
 
 				// Check if better
-				if isBetterByTarget(target, teamDps, bestTeamDps, charDps, bestCharDps) {
+				if domain.IsBetterByTarget(target, teamDps, bestTeamDps, charDps, bestCharDps) {
 					bestTeamDps = teamDps
 					bestCharDps = charDps
 					bestEr = er
@@ -204,19 +208,19 @@ func run(appRoot string) error {
 				}
 			}
 			// Save best result for this weapon+ref
-			results = append(results, Result{Weapon: weapon, Refine: ref, TeamDps: bestTeamDps, CharDps: bestCharDps, Er: bestEr, MainStats: bestMainStats})
+			results = append(results, domain.Result{Weapon: weapon, Refine: ref, TeamDps: bestTeamDps, CharDps: bestCharDps, Er: bestEr, MainStats: bestMainStats})
 		}
 	}
 
 	// Sort results by team DPS (desc)
-	sortResultsByTarget(results, target)
+	output.SortResultsByTarget(results, target)
 
 	// Print results
-	printResults(results, weaponNames, weaponSources, target)
+	output.PrintResults(results, weaponNames, weaponSources, target)
 
 	// Export to xlsx
 	if cfg.ExportXlsx {
-		xlsxPath, err := exportResultsXLSX(appRoot, cfg.RosterName, results)
+		xlsxPath, err := output.ExportResultsXLSX(appRoot, cfg.RosterName, results)
 		if err != nil {
 			return err
 		}

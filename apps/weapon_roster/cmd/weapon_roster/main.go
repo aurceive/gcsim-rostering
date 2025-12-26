@@ -3,9 +3,9 @@ package main
 import (
 	"os"
 
-	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/weaponroster"
+	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/app"
 )
 
 func main() {
-	os.Exit(weaponroster.Run())
+	os.Exit(app.Run())
 }

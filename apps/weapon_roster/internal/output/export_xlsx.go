@@ -1,4 +1,4 @@
-package weaponroster
+package output
 
 import (
 	"fmt"
@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/domain"
+
 	"github.com/xuri/excelize/v2"
 )
 
-func exportResultsXLSX(appRoot string, rosterName string, results []Result) (string, error) {
+func ExportResultsXLSX(appRoot string, rosterName string, results []domain.Result) (string, error) {
 	// Export to xlsx
 	f := excelize.NewFile()
 	sheet := "Sheet1"

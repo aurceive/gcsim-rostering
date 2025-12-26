@@ -1,6 +1,8 @@
-package weaponroster
+package config
 
-func buildMainStatCombos(cfg Config) []string {
+import "github.com/genshinsim/gcsim/apps/weapon_roster/internal/domain"
+
+func BuildMainStatCombos(cfg domain.Config) []string {
 	var mainStatCombos []string
 	for _, s := range cfg.MainStats.Sands {
 		for _, g := range cfg.MainStats.Goblet {

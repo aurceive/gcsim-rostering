@@ -1,4 +1,4 @@
-package weaponroster
+package weapons
 
 import (
 	"fmt"
@@ -6,10 +6,30 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/domain"
+
 	"gopkg.in/yaml.v3"
 )
 
-func loadWeaponSources(appRoot string) (map[string][]string, string, error) {
+var allowedWeaponSources = map[string]struct{}{
+	"Стандартная молитва": {},
+	"Магазин Паймон":      {},
+	"Ковка":               {},
+	"Ивент":               {},
+	"Ивентовая оружейная молитва": {},
+	"БП":      {},
+	"ПС5":     {},
+	"Квесты":  {},
+	"Рыбалка": {},
+}
+
+var refineAllowsR1R5Sources = map[string]struct{}{
+	"БП": {},
+	"Ивентовая оружейная молитва": {},
+	"Магазин Паймон":              {},
+}
+
+func LoadSources(appRoot string) (map[string][]string, string, error) {
 	path := filepath.Join(appRoot, "weapon_sources_ru.yaml")
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -25,7 +45,7 @@ func loadWeaponSources(appRoot string) (map[string][]string, string, error) {
 	return out, path, nil
 }
 
-func validateWeaponSources(sourcesByWeapon map[string][]string) error {
+func ValidateSources(sourcesByWeapon map[string][]string) error {
 	for key, sources := range sourcesByWeapon {
 		for _, s := range sources {
 			if _, ok := allowedWeaponSources[s]; !ok {
@@ -62,7 +82,7 @@ func appendWeaponSourceStubs(filePath string, stubs []string) error {
 	return err
 }
 
-func refinesForWeapon(w Weapon, sources []string) []int {
+func RefinesForWeapon(w domain.Weapon, sources []string) []int {
 	// Правила пробуждений касаются только 4*.
 	if w.Rarity == 4 {
 		// По умолчанию: r1 и r5, но если есть любой источник кроме

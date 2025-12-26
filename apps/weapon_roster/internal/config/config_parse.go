@@ -1,8 +1,8 @@
-package weaponroster
+package config
 
 import "strings"
 
-func parseCharOrder(configStr string) []string {
+func ParseCharOrder(configStr string) []string {
 	var charOrder []string
 	lines := strings.SplitSeq(configStr, "\n")
 	for line := range lines {
@@ -18,7 +18,7 @@ func parseCharOrder(configStr string) []string {
 	return charOrder
 }
 
-func findCharIndex(charOrder []string, char string) int {
+func FindCharIndex(charOrder []string, char string) int {
 	for i, name := range charOrder {
 		if name == char {
 			return i
