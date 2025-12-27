@@ -20,10 +20,6 @@ func Exit(code int) error {
 	return ExitError{Code: code}
 }
 
-func ExitWithError(code int, err error) error {
-	return ExitError{Code: code, Err: err}
-}
-
 func asExitError(err error) (ExitError, bool) {
 	if err == nil {
 		return ExitError{}, false

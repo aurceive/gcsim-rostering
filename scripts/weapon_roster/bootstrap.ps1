@@ -53,7 +53,8 @@ try {
   }
 
   Invoke-Step -Title 'Build engine CLIs' -Action {
-    & $buildEngineClisScript
+    # weapon_roster only requires gcsim.exe; repl.exe/server.exe are not used.
+    & $buildEngineClisScript -Engine 'all' -Targets @('gcsim')
   }
 
   Write-Host 'Done.'

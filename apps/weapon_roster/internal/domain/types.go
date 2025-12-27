@@ -7,7 +7,6 @@ type Config struct {
 	EnginePath          string   `yaml:"engine_path"`
 	Char                string   `yaml:"char"`
 	RosterName          string   `yaml:"roster_name"`
-	ExportXlsx          bool     `yaml:"export_xlsx"`
 	Target              []string `yaml:"target"`
 	MinimumWeaponRarity int      `yaml:"minimum_weapon_rarity"`
 	MainStats           struct {

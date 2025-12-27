@@ -4,7 +4,7 @@
 
 ### 1 Актуализировать + подгрузить зависимости + собрать
 
-- `./scripts/weapon_roster/bootstrap.ps1`
+- `scripts/weapon_roster/bootstrap.ps1`
 
 Скрипт:
 
@@ -15,5 +15,5 @@
 
 ### 2 Запустить
 
-- Заполните `config.txt` и проверьте настройки в `apps/weapon_roster/roster_config.yaml`.
+- Заполните `config.txt` и проверьте настройки в `roster_config.yaml`.
 - `apps/weapon_roster/roster.exe`

@@ -11,7 +11,7 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-func ExportResultsXLSX(appRoot string, rosterName string, results []domain.Result) (string, error) {
+func ExportResultsXLSX(appRoot string, char string, rosterName string, results []domain.Result) (string, error) {
 	// Export to xlsx
 	f := excelize.NewFile()
 	sheet := "Sheet1"
@@ -38,7 +38,7 @@ func ExportResultsXLSX(appRoot string, rosterName string, results []domain.Resul
 
 	// yearmonthday
 	timestamp := time.Now().Format("20060102")
-	filename := filepath.Join(appRoot, "rosters", fmt.Sprintf("%s_%s.xlsx", rosterName, timestamp))
+	filename := filepath.Join(appRoot, "rosters", fmt.Sprintf("%s weapon roster %s %s.xlsx", timestamp, char, rosterName))
 	if err := f.SaveAs(filename); err != nil {
 		return "", err
 	}

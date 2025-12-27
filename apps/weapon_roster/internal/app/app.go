@@ -39,6 +39,8 @@ func Run() int {
 }
 
 func run(appRoot string) error {
+	totalStart := time.Now()
+
 	// Read config.txt
 	configBytes, err := os.ReadFile(filepath.Join(appRoot, "config.txt"))
 	if err != nil {
@@ -134,6 +136,7 @@ func run(appRoot string) error {
 
 	// Results
 	var results []domain.Result
+	var simElapsed time.Duration
 
 	// Prepare progress tracking
 	// totalRuns = sum over weapons of (#refines * #mainStatCombos)
@@ -171,11 +174,12 @@ func run(appRoot string) error {
 					return err
 				}
 
+				simStart := time.Now()
 				res, err := runner.OptimizeAndRun(context.Background(), tempConfig)
 				if err != nil {
 					return err
 				}
-
+				simElapsed += time.Since(simStart)
 				teamDps := int(*res.Statistics.DPS.Mean)
 				charDps := int(*res.Statistics.CharacterDps[charIndex].Mean)
 				// TODO: Нужен ER персонажа на 0 секунде симуляции (полный ER),
@@ -215,17 +219,24 @@ func run(appRoot string) error {
 	// Sort results by team DPS (desc)
 	output.SortResultsByTarget(results, target)
 
-	// Print results
-	output.PrintResults(results, weaponNames, weaponSources, target)
-
-	// Export to xlsx
-	if cfg.ExportXlsx {
-		xlsxPath, err := output.ExportResultsXLSX(appRoot, cfg.RosterName, results)
-		if err != nil {
-			return err
-		}
-		fmt.Println("Exported results to", xlsxPath)
+	// Always export to xlsx (no console result output)
+	xlsxPath, err := output.ExportResultsXLSX(appRoot, char, cfg.RosterName, results)
+	if err != nil {
+		return err
 	}
+	fmt.Println("Exported results to", xlsxPath)
+
+	// Timing summary
+	totalElapsed := time.Since(totalStart)
+	appElapsed := totalElapsed - simElapsed
+	if appElapsed < 0 {
+		appElapsed = 0
+	}
+	fmt.Printf("Timing: total=%s, app=%s, simulations=%s\n",
+		totalElapsed.Round(time.Second),
+		appElapsed.Round(time.Second),
+		simElapsed.Round(time.Second),
+	)
 
 	return nil
 }
