@@ -50,7 +50,7 @@ func ExportResultsXLSX(appRoot string, char string, rosterName string, results [
 
 	// yearmonthday
 	timestamp := time.Now().Format("20060102")
-	filename := filepath.Join(appRoot, "rosters", fmt.Sprintf("%s weapon roster %s %s.xlsx", timestamp, char, rosterName))
+	filename := filepath.Join(appRoot, "rosters", fmt.Sprintf("%s_weapon_roster_%s_%s.xlsx", timestamp, char, rosterName))
 	if err := f.SaveAs(filename); err != nil {
 		return "", err
 	}
