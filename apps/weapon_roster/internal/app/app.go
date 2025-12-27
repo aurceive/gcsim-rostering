@@ -130,7 +130,7 @@ func run(appRoot string) error {
 	}
 	tempConfig := filepath.Join(workDir, "temp_config.txt")
 
-	runner := sim.GcsimRunner{}
+	runner := sim.CLIRunner{EngineRoot: engineRoot}
 
 	// Results
 	var results []domain.Result

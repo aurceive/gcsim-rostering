@@ -4,7 +4,7 @@ engine: gcsim
 
 char: fischl
 roster_name: fischl перегрузки
-minimum_weapon_rarity: 4
+minimum_weapon_rarity: 5
 target:
   - personal_dps
 #  - team_dps
