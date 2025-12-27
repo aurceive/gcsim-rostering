@@ -182,10 +182,13 @@ func run(appRoot string) error {
 				simElapsed += time.Since(simStart)
 				teamDps := int(*res.Statistics.DPS.Mean)
 				charDps := int(*res.Statistics.CharacterDps[charIndex].Mean)
-				// TODO: Нужен ER персонажа на 0 секунде симуляции (полный ER),
-				// а не только ER, который приходит от артефактов/параметров выдачи.
-				// В браузерной версии это видно, но как достать здесь — выяснить позже.
-				er := res.CharacterDetails[charIndex].Stats[7] // ER index (текущее поведение сохраняем)
+				if len(res.CharacterDetails) <= charIndex {
+					return fmt.Errorf("engine result missing character_details[%d]", charIndex)
+				}
+				if len(res.CharacterDetails[charIndex].Snapshot) <= 7 {
+					return fmt.Errorf("engine result missing character_details[%d].snapshot[7]", charIndex)
+				}
+				er := res.CharacterDetails[charIndex].Snapshot[7] // ER index
 
 				// Check if better
 				if domain.IsBetterByTarget(target, teamDps, bestTeamDps, charDps, bestCharDps) {

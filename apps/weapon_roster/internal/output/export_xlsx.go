@@ -19,7 +19,7 @@ func ExportResultsXLSX(appRoot string, char string, rosterName string, results [
 	f.SetCellValue(sheet, "B1", "Refine")
 	f.SetCellValue(sheet, "C1", "Team DPS")
 	f.SetCellValue(sheet, "D1", "Char DPS")
-	f.SetCellValue(sheet, "E1", "ER")
+	f.SetCellValue(sheet, "E1", "ER at 0s")
 	f.SetCellValue(sheet, "F1", "Main Stats")
 	for i, r := range results {
 		row := i + 2
@@ -29,6 +29,18 @@ func ExportResultsXLSX(appRoot string, char string, rosterName string, results [
 		f.SetCellValue(sheet, fmt.Sprintf("D%d", row), r.CharDps)
 		f.SetCellValue(sheet, fmt.Sprintf("E%d", row), r.Er)
 		f.SetCellValue(sheet, fmt.Sprintf("F%d", row), r.MainStats)
+	}
+
+	// ER as percent: 1.0 => 100%
+	if len(results) > 0 {
+		styleID, err := f.NewStyle(&excelize.Style{NumFmt: 10})
+		if err != nil {
+			return "", err
+		}
+		lastRow := len(results) + 1
+		if err := f.SetCellStyle(sheet, "E2", fmt.Sprintf("E%d", lastRow), styleID); err != nil {
+			return "", err
+		}
 	}
 
 	// Create dir if not exists

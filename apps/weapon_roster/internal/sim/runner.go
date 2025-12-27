@@ -32,7 +32,8 @@ type SimulationResult struct {
 	} `json:"statistics"`
 
 	CharacterDetails []struct {
-		Stats []float64 `json:"stats"`
+		Stats    []float64 `json:"stats"`
+		Snapshot []float64 `json:"snapshot"`
 	} `json:"character_details"`
 }
 
