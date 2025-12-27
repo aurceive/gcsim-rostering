@@ -74,6 +74,29 @@ func TestRefinesForWeapon(t *testing.T) {
 	}
 }
 
+func TestIsAvailableWeapon(t *testing.T) {
+	w3 := domain.Weapon{Key: "w3", Rarity: 3}
+	if got := weapons.IsAvailableWeapon(w3, nil); !got {
+		t.Fatalf("expected 3* to be available")
+	}
+
+	w4 := domain.Weapon{Key: "w4", Rarity: 4}
+	if got := weapons.IsAvailableWeapon(w4, []string{"БП"}); got {
+		t.Fatalf("expected 4* with only limited sources to be unavailable")
+	}
+	if got := weapons.IsAvailableWeapon(w4, []string{"Ковка"}); !got {
+		t.Fatalf("expected 4* with non-limited source to be available")
+	}
+	if got := weapons.IsAvailableWeapon(w4, []string{"БП", "Ковка"}); !got {
+		t.Fatalf("expected 4* with mixed sources to be available")
+	}
+
+	w5 := domain.Weapon{Key: "w5", Rarity: 5}
+	if got := weapons.IsAvailableWeapon(w5, []string{"Стандартная молитва"}); got {
+		t.Fatalf("expected 5* to be unavailable")
+	}
+}
+
 func TestSelectWeaponsByClassAndRarity(t *testing.T) {
 	wd := domain.WeaponData{Data: map[string]domain.Weapon{
 		"a": {Key: "a", WeaponClass: "claymore", Rarity: 3},

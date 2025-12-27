@@ -223,7 +223,7 @@ func run(appRoot string) error {
 	output.SortResultsByTarget(results, target)
 
 	// Always export to xlsx (no console result output)
-	xlsxPath, err := output.ExportResultsXLSX(appRoot, char, cfg.RosterName, results)
+	xlsxPath, err := output.ExportResultsXLSX(appRoot, char, cfg.RosterName, results, weaponData, weaponNames, weaponSources)
 	if err != nil {
 		return err
 	}
