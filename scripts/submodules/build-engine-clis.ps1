@@ -11,6 +11,8 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 
+$binsRoot = Join-Path $repoRoot (Join-Path 'engines' 'bins')
+
 function Get-EngineDirs {
   param([string]$engine)
 
@@ -37,7 +39,11 @@ function Build-Target {
     return
   }
 
-  $outExe = Join-Path $engineDir ("$target.exe")
+  $engineName = Split-Path $engineDir -Leaf
+  $outDir = Join-Path $binsRoot $engineName
+  New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+
+  $outExe = Join-Path $outDir ("$target.exe")
 
   Write-Host "[build] ${engineDir}: $pkgPath -> $outExe"
   & go -C $engineDir build -o $outExe $pkgPath

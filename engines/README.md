@@ -34,7 +34,7 @@
 
 ## Сборка CLI движков
 
-В сабмодулях игнорируется любой `*.exe`, поэтому бинарники можно оставлять прямо в корне сабмодуля.
+Бинарники движков складываются в `engines/bins/<engine>/` (это держит сабмодули чистыми).
 
 ### Вариант 1: сборка скриптом (PowerShell)
 
@@ -43,15 +43,15 @@
 
 Примеры результата (пути):
 
-- `gcsim/gcsim.exe`
-- `wfpsim/gcsim.exe`
-- `custom/gcsim.exe`
+- `bins/gcsim/gcsim.exe`
+- `bins/wfpsim/gcsim.exe`
+- `bins/custom/gcsim.exe`
 
 ### Вариант 2: вручную (PowerShell)
 
 - gcsim:
-  - `go -C gcsim build -o gcsim.exe ./cmd/gcsim`
+  - `go -C gcsim build -o ..\bins\gcsim\gcsim.exe ./cmd/gcsim`
 - wfpsim:
-  - `go -C wfpsim build -o gcsim.exe ./cmd/gcsim`
+  - `go -C wfpsim build -o ..\bins\wfpsim\gcsim.exe ./cmd/gcsim`
 - custom:
-  - `go -C custom build -o gcsim.exe ./cmd/gcsim`
+  - `go -C custom build -o ..\bins\custom\gcsim.exe ./cmd/gcsim`

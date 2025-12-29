@@ -37,8 +37,8 @@ type SimulationResult struct {
 	} `json:"character_details"`
 }
 
-// CLIRunner runs an engine via its gcsim.exe CLI located inside the engine repo.
-// Expected layout (as produced by scripts/build-engine-clis.ps1): <engineRoot>/gcsim.exe.
+// CLIRunner runs an engine via its gcsim.exe CLI.
+// Expected layout (as produced by scripts/build-engine-clis.ps1): <repoRoot>/engines/bins/<engine>/gcsim.exe.
 type CLIRunner struct {
 	EngineRoot string
 }
@@ -103,15 +103,17 @@ func resolveEngineCLI(engineRoot string) (string, error) {
 	if engineRoot == "" {
 		return "", fmt.Errorf("engine root is empty")
 	}
-	primary := filepath.Join(engineRoot, "gcsim.exe")
-	if _, err := os.Stat(primary); err == nil {
-		return primary, nil
+
+	// New layout: <repoRoot>/engines/bins/<engine>/gcsim.exe
+	// We can derive it when engineRoot looks like: <repoRoot>/engines/<engine>
+	parent := filepath.Dir(engineRoot)
+	if filepath.Base(parent) == "engines" {
+		bins := filepath.Join(parent, "bins", filepath.Base(engineRoot), "gcsim.exe")
+		if _, err := os.Stat(bins); err == nil {
+			return bins, nil
+		}
+		return "", fmt.Errorf("cannot find engine CLI at %q (run scripts/build-engine-clis.ps1)", bins)
 	}
 
-	alt := filepath.Join(engineRoot, "cmd", "gcsim", "gcsim.exe")
-	if _, err := os.Stat(alt); err == nil {
-		return alt, nil
-	}
-
-	return "", fmt.Errorf("cannot find engine CLI gcsim.exe in %q; expected %q (run scripts/build-engine-clis.ps1)", engineRoot, primary)
+	return "", fmt.Errorf("engine root %q is not under an 'engines' directory; cannot derive engines/bins path", engineRoot)
 }

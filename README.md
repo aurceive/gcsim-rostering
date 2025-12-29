@@ -11,7 +11,7 @@
 - обновляет сабмодули
 - скачивает Go-пакеты во всех Go-модулях
 - собирает `apps/weapon_roster/roster.exe`
-- собирает CLI движков (в т.ч. `engines/<engine>/gcsim.exe`)
+- собирает CLI движков (в т.ч. `engines/bins/<engine>/gcsim.exe`)
 
 ### 2 Запустить
 
