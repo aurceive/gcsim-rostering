@@ -33,10 +33,42 @@ $submodulesDir = Join-Path (Join-Path $PSScriptRoot '..') 'submodules'
 $updateSubmodulesScript = Join-Path $submodulesDir 'update-submodules.ps1'
 $buildEngineClisScript = Join-Path $submodulesDir 'build-engine-clis.ps1'
 
+$weaponRosterInputDir = Join-Path $repoRoot (Join-Path 'input' 'weapon_roster')
+$weaponRosterExamplesDir = Join-Path $weaponRosterInputDir 'examples'
+
+function Ensure-WeaponRosterConfigs {
+  [CmdletBinding()]
+  param()
+
+  New-Item -ItemType Directory -Force -Path $weaponRosterInputDir | Out-Null
+
+  $pairs = @(
+    @{ Name = 'config.txt'; Example = (Join-Path $weaponRosterExamplesDir 'config.exemple.txt') },
+    @{ Name = 'roster_config.yaml'; Example = (Join-Path $weaponRosterExamplesDir 'roster_config.exemple.yaml') }
+  )
+
+  foreach ($p in $pairs) {
+    $dst = Join-Path $weaponRosterInputDir $p.Name
+    $src = $p.Example
+
+    if (-not (Test-Path -LiteralPath $dst)) {
+      if (-not (Test-Path -LiteralPath $src)) {
+        throw "Example config missing: $src"
+      }
+      Copy-Item -LiteralPath $src -Destination $dst
+      Write-Host "Created $dst from examples."
+    }
+  }
+}
+
 Push-Location $repoRoot
 try {
   Invoke-Step -Title 'Update submodules' -Action {
     & $updateSubmodulesScript
+  }
+
+  Invoke-Step -Title 'Ensure weapon_roster configs exist' -Action {
+    Ensure-WeaponRosterConfigs
   }
 
   Invoke-Step -Title 'Download Go modules' -Action {

@@ -42,17 +42,19 @@ func run(appRoot string) error {
 	totalStart := time.Now()
 
 	// Read config.txt
-	configBytes, err := os.ReadFile(filepath.Join(appRoot, "config.txt"))
+	configPath := filepath.Join(appRoot, "input", "weapon_roster", "config.txt")
+	configBytes, err := os.ReadFile(configPath)
 	if err != nil {
-		return fmt.Errorf("read config.txt: %w", err)
+		return fmt.Errorf("read config.txt (%s): %w", configPath, err)
 	}
 	configStr := string(configBytes)
 
 	// Read roster_config.yaml
 	var cfg domain.Config
-	yamlBytes, err := os.ReadFile(filepath.Join(appRoot, "roster_config.yaml"))
+	rosterConfigPath := filepath.Join(appRoot, "input", "weapon_roster", "roster_config.yaml")
+	yamlBytes, err := os.ReadFile(rosterConfigPath)
 	if err != nil {
-		return fmt.Errorf("read roster_config.yaml: %w", err)
+		return fmt.Errorf("read roster_config.yaml (%s): %w", rosterConfigPath, err)
 	}
 	err = yaml.Unmarshal(yamlBytes, &cfg)
 	if err != nil {
@@ -69,7 +71,7 @@ func run(appRoot string) error {
 		return fmt.Errorf("load engine data: %w", err)
 	}
 
-	// Read weapon_sources_ru.yaml for weapon source data
+	// Read data/weapon_sources_ru.yaml for weapon source data
 	weaponSources, weaponSourcesPath, err := weapons.LoadSources(appRoot)
 	if err != nil {
 		return fmt.Errorf("load weapon sources: %w", err)

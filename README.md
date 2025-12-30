@@ -11,9 +11,13 @@
 - обновляет сабмодули
 - скачивает Go-пакеты во всех Go-модулях
 - собирает `apps/weapon_roster/roster.exe`
-- собирает CLI движков (в т.ч. `engines/bins/<engine>/gcsim.exe`)
+- собирает CLI движков
 
-### 2 Запустить
+### 2 Настроить
 
-- Заполните `config.txt` и проверьте настройки в `roster_config.yaml`.
+- Заполните `input/weapon_roster/config.txt`
+- Проверьте настройки в `input/weapon_roster/roster_config.yaml`.
+
+### 3 Запустить
+
 - `apps/weapon_roster/roster.exe`

@@ -12,9 +12,11 @@
 
 - `apps/weapon_roster/roster.exe`
 
+Если `input/weapon_roster/config.txt` или `input/weapon_roster/roster_config.yaml` отсутствуют, запустите `scripts/weapon_roster/bootstrap.ps1` — он создаст их из `input/weapon_roster/examples/`.
+
 ## Выбор активного движка
 
-В `roster_config.yaml`:
+В `input/weapon_roster/roster_config.yaml`:
 
 - `engine: gcsim` или `engine: wfpsim` или `engine: custom`
 - либо `engine_path: <путь>` для явного указания пути к репо движка

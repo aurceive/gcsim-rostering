@@ -53,7 +53,7 @@ func IsAvailableWeapon(w domain.Weapon, sources []string) bool {
 }
 
 func LoadSources(appRoot string) (map[string][]string, string, error) {
-	path := filepath.Join(appRoot, "weapon_sources_ru.yaml")
+	path := filepath.Join(appRoot, "data", "weapon_sources_ru.yaml")
 	b, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {

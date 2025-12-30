@@ -98,13 +98,13 @@ func ExportResultsXLSX(appRoot string, char string, rosterName string, results [
 	}
 
 	// Create dir if not exists
-	if err := os.MkdirAll(filepath.Join(appRoot, "rosters"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(appRoot, "output", "weapon_roster"), 0o755); err != nil {
 		return "", err
 	}
 
 	// yearmonthday
 	timestamp := time.Now().Format("20060102")
-	filename := filepath.Join(appRoot, "rosters", fmt.Sprintf("%s_weapon_roster_%s_%s.xlsx", timestamp, char, rosterName))
+	filename := filepath.Join(appRoot, "output", "weapon_roster", fmt.Sprintf("%s_weapon_roster_%s_%s.xlsx", timestamp, char, rosterName))
 	if err := f.SaveAs(filename); err != nil {
 		return "", err
 	}
