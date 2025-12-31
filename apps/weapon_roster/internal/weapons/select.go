@@ -40,14 +40,17 @@ func SortByRarityDescThenKey(weapons []string, weaponData domain.WeaponData) []s
 	return out
 }
 
-func ComputeTotalRuns(weaponsToRun []string, weaponData domain.WeaponData, weaponSources map[string][]string, mainStatCombos []string) (int, bool) {
+func ComputeTotalRuns(weaponsToRun []string, weaponData domain.WeaponData, weaponSources map[string][]string, mainStatCombos []string, variantCount int) (int, bool) {
+	if variantCount <= 0 {
+		variantCount = 1
+	}
 	totalRuns := 0
 	for _, w := range weaponsToRun {
 		wd, ok := weaponData.Data[w]
 		if !ok {
 			return 0, false
 		}
-		totalRuns += len(RefinesForWeapon(wd, weaponSources[w])) * len(mainStatCombos)
+		totalRuns += len(RefinesForWeapon(wd, weaponSources[w])) * len(mainStatCombos) * variantCount
 	}
 	return totalRuns, true
 }

@@ -8,6 +8,15 @@ minimum_weapon_rarity: 5
 target:
   - personal_dps
 #  - team_dps
+
+substat_optimizer_variants:
+  - name: default
+  - name: high_investment
+    options:
+      total_liquid_substats: 40
+      indiv_liquid_cap: 15
+      fixed_substats_count: 0
+
 main_stats:
   sands:
     # - er=0.518

@@ -3,17 +3,23 @@ package domain
 import "gopkg.in/yaml.v3"
 
 type Config struct {
-	Engine              string   `yaml:"engine"`
-	EnginePath          string   `yaml:"engine_path"`
-	Char                string   `yaml:"char"`
-	RosterName          string   `yaml:"roster_name"`
-	Target              []string `yaml:"target"`
-	MinimumWeaponRarity int      `yaml:"minimum_weapon_rarity"`
-	MainStats           struct {
+	Engine                   string                    `yaml:"engine"`
+	EnginePath               string                    `yaml:"engine_path"`
+	Char                     string                    `yaml:"char"`
+	RosterName               string                    `yaml:"roster_name"`
+	Target                   []string                  `yaml:"target"`
+	MinimumWeaponRarity      int                       `yaml:"minimum_weapon_rarity"`
+	SubstatOptimizerVariants []SubstatOptimizerVariant `yaml:"substat_optimizer_variants"`
+	MainStats                struct {
 		Sands   []string `yaml:"sands"`
 		Goblet  []string `yaml:"goblet"`
 		Circlet []string `yaml:"circlet"`
 	} `yaml:"main_stats"`
+}
+
+type SubstatOptimizerVariant struct {
+	Name    string         `yaml:"name"`
+	Options map[string]any `yaml:"options"`
 }
 
 func (c *Config) UnmarshalYAML(value *yaml.Node) error {

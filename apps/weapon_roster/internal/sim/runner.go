@@ -9,13 +9,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
 // SimulationRunner abstracts a simulation engine.
 // We keep it minimal: weapon_roster only needs DPS, per-character DPS, and character stats.
 type SimulationRunner interface {
-	OptimizeAndRun(ctx context.Context, configPath string) (*SimulationResult, error)
+	OptimizeAndRun(ctx context.Context, configPath string, substatOptions string) (*SimulationResult, error)
 }
 
 // SimulationResult is a minimal subset of the engine result JSON.
@@ -43,7 +44,7 @@ type CLIRunner struct {
 	EngineRoot string
 }
 
-func (r CLIRunner) OptimizeAndRun(ctx context.Context, configPath string) (*SimulationResult, error) {
+func (r CLIRunner) OptimizeAndRun(ctx context.Context, configPath string, substatOptions string) (*SimulationResult, error) {
 	engineExe, err := resolveEngineCLI(r.EngineRoot)
 	if err != nil {
 		return nil, err
@@ -53,11 +54,15 @@ func (r CLIRunner) OptimizeAndRun(ctx context.Context, configPath string) (*Simu
 	outPath := filepath.Join(filepath.Dir(configPath), "last_result.json")
 	_ = os.Remove(outPath)
 
-	cmd := exec.CommandContext(ctx, engineExe,
+	args := []string{
 		"-c", configPath,
 		"-substatOptimFull",
 		"-out", outPath,
-	)
+	}
+	if strings.TrimSpace(substatOptions) != "" {
+		args = append(args, "-options", strings.TrimSpace(substatOptions))
+	}
+	cmd := exec.CommandContext(ctx, engineExe, args...)
 	cmd.Dir = r.EngineRoot
 
 	// Silence engine output by default, but capture for error reporting.

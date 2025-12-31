@@ -141,12 +141,21 @@ func TestComputeTotalRuns(t *testing.T) {
 	}
 	combos := []string{"c1", "c2", "c3"}
 	// w4 -> [1 5] => 2, w5 -> [1] => 1 => total (2+1)*3=9
-	total, ok := weapons.ComputeTotalRuns([]string{"w4", "w5"}, wd, sources, combos)
+	total, ok := weapons.ComputeTotalRuns([]string{"w4", "w5"}, wd, sources, combos, 1)
 	if !ok {
 		t.Fatalf("expected ok")
 	}
 	if total != 9 {
 		t.Fatalf("expected 9, got %d", total)
+	}
+
+	// With 2 substat option variants, total runs doubles.
+	total, ok = weapons.ComputeTotalRuns([]string{"w4", "w5"}, wd, sources, combos, 2)
+	if !ok {
+		t.Fatalf("expected ok")
+	}
+	if total != 18 {
+		t.Fatalf("expected 18, got %d", total)
 	}
 }
 
