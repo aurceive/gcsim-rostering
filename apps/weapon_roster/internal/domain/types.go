@@ -59,4 +59,5 @@ type Result struct {
 	CharDps   int
 	Er        float64
 	MainStats string
+	Config    string
 }

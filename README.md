@@ -20,4 +20,5 @@
 
 ### 3 Запустить
 
-- `apps/weapon_roster/roster.exe`
+- Основной: `apps/weapon_roster/roster.exe`
+- На примерах: `apps/weapon_roster/roster.exe -useExamples`

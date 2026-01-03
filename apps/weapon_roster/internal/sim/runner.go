@@ -23,6 +23,8 @@ type SimulationRunner interface {
 // This is intentionally decoupled from github.com/genshinsim/gcsim/pkg/model so weapon_roster
 // can switch engines at runtime via engine CLIs.
 type SimulationResult struct {
+	ConfigFile string `json:"config_file"`
+
 	Statistics struct {
 		DPS struct {
 			Mean *float64 `json:"mean"`
@@ -100,6 +102,9 @@ func (r CLIRunner) OptimizeAndRun(ctx context.Context, configPath string, substa
 	// Basic sanity checks to surface mismatched JSON schemas early.
 	if res.Statistics.DPS.Mean == nil {
 		return nil, fmt.Errorf("engine result missing statistics.dps.mean (%q)", outPath)
+	}
+	if strings.TrimSpace(res.ConfigFile) == "" {
+		return nil, fmt.Errorf("engine result missing config_file (%q)", outPath)
 	}
 	return &res, nil
 }

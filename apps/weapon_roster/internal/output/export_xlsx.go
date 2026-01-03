@@ -99,29 +99,55 @@ func ExportResultsXLSX(appRoot string, char string, rosterName string, target do
 
 	// Export to xlsx
 	f := excelize.NewFile()
-	sheet := "Sheet1"
+	defaultSheet := "Sheet1"
+	sheet := "Results"
+	_ = f.SetSheetName(defaultSheet, sheet)
+	sheetWithConfig := "Results+Config"
+	_, _ = f.NewSheet(sheetWithConfig)
 
 	// Headers (2 rows):
-	// Row 1: variant name (merged across 6 columns)
+	// Row 1: variant name (merged across columns)
 	// Row 2: metric names
-	f.SetCellValue(sheet, "A1", "Weapon")
-	f.SetCellValue(sheet, "B1", "Refine")
-	_ = f.MergeCell(sheet, "A1", "A2")
-	_ = f.MergeCell(sheet, "B1", "B2")
+	for _, sh := range []string{sheet, sheetWithConfig} {
+		f.SetCellValue(sh, "A1", "Weapon")
+		f.SetCellValue(sh, "B1", "Refine")
+		_ = f.MergeCell(sh, "A1", "A2")
+		_ = f.MergeCell(sh, "B1", "B2")
+	}
 
 	for i, v := range variantOrder {
-		start := 3 + i*6
-		startCol := colName(start)
-		endCol := colName(start + 5)
-		_ = f.MergeCell(sheet, fmt.Sprintf("%s1", startCol), fmt.Sprintf("%s1", endCol))
-		f.SetCellValue(sheet, fmt.Sprintf("%s1", startCol), v)
+		// Results sheet (6 columns per variant)
+		{
+			start := 3 + i*6
+			startCol := colName(start)
+			endCol := colName(start + 5)
+			_ = f.MergeCell(sheet, fmt.Sprintf("%s1", startCol), fmt.Sprintf("%s1", endCol))
+			f.SetCellValue(sheet, fmt.Sprintf("%s1", startCol), v)
 
-		f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+0)), "Team DPS")
-		f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+1)), "Team %")
-		f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+2)), "Char DPS")
-		f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+3)), "Char %")
-		f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+4)), "ER at 0s")
-		f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+5)), "Main Stats")
+			f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+0)), "Team DPS")
+			f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+1)), "Team %")
+			f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+2)), "Char DPS")
+			f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+3)), "Char %")
+			f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+4)), "ER at 0s")
+			f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+5)), "Main Stats")
+		}
+
+		// Results+Config sheet (7 columns per variant)
+		{
+			start := 3 + i*7
+			startCol := colName(start)
+			endCol := colName(start + 6)
+			_ = f.MergeCell(sheetWithConfig, fmt.Sprintf("%s1", startCol), fmt.Sprintf("%s1", endCol))
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s1", startCol), v)
+
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+0)), "Team DPS")
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+1)), "Team %")
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+2)), "Char DPS")
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+3)), "Char %")
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+4)), "ER at 0s")
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+5)), "Main Stats")
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+6)), "Config")
+		}
 	}
 
 	// Header alignment: center horizontally + vertically for rows 1-2.
@@ -132,11 +158,19 @@ func ExportResultsXLSX(appRoot string, char string, rosterName string, target do
 		if err != nil {
 			return "", err
 		}
-		lastCol := colName(2 + len(variantOrder)*6)
-		if lastCol == "" {
-			lastCol = "B"
+		lastColResults := colName(2 + len(variantOrder)*6)
+		if lastColResults == "" {
+			lastColResults = "B"
 		}
-		if err := f.SetCellStyle(sheet, "A1", fmt.Sprintf("%s2", lastCol), headerStyleID); err != nil {
+		if err := f.SetCellStyle(sheet, "A1", fmt.Sprintf("%s2", lastColResults), headerStyleID); err != nil {
+			return "", err
+		}
+
+		lastColCfg := colName(2 + len(variantOrder)*7)
+		if lastColCfg == "" {
+			lastColCfg = "B"
+		}
+		if err := f.SetCellStyle(sheetWithConfig, "A1", fmt.Sprintf("%s2", lastColCfg), headerStyleID); err != nil {
 			return "", err
 		}
 	}
@@ -158,6 +192,8 @@ func ExportResultsXLSX(appRoot string, char string, rosterName string, target do
 		}
 		f.SetCellValue(sheet, fmt.Sprintf("A%d", row), name)
 		f.SetCellValue(sheet, fmt.Sprintf("B%d", row), k.Refine)
+		f.SetCellValue(sheetWithConfig, fmt.Sprintf("A%d", row), name)
+		f.SetCellValue(sheetWithConfig, fmt.Sprintf("B%d", row), k.Refine)
 
 		for i, v := range variantOrder {
 			start := 3 + i*6
@@ -176,6 +212,19 @@ func ExportResultsXLSX(appRoot string, char string, rosterName string, target do
 			}
 			f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+4), row), r.Er)
 			f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+5), row), r.MainStats)
+
+			startCfg := 3 + i*7
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(startCfg+0), row), r.TeamDps)
+			if bestAvailTeam[v] > 0 {
+				f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(startCfg+1), row), float64(r.TeamDps)/float64(bestAvailTeam[v]))
+			}
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(startCfg+2), row), r.CharDps)
+			if bestAvailChar[v] > 0 {
+				f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(startCfg+3), row), float64(r.CharDps)/float64(bestAvailChar[v]))
+			}
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(startCfg+4), row), r.Er)
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(startCfg+5), row), r.MainStats)
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(startCfg+6), row), r.Config)
 		}
 	}
 
@@ -201,6 +250,25 @@ func ExportResultsXLSX(appRoot string, char string, rosterName string, target do
 				return "", err
 			}
 		}
+		for i := range variantOrder {
+			start := 3 + i*7
+			teamPctCol := colName(start + 1)
+			charPctCol := colName(start + 3)
+			erCol := colName(start + 4)
+			if err := f.SetCellStyle(sheetWithConfig, fmt.Sprintf("%s3", teamPctCol), fmt.Sprintf("%s%d", teamPctCol, lastRow), styleID); err != nil {
+				return "", err
+			}
+			if err := f.SetCellStyle(sheetWithConfig, fmt.Sprintf("%s3", charPctCol), fmt.Sprintf("%s%d", charPctCol, lastRow), styleID); err != nil {
+				return "", err
+			}
+			if err := f.SetCellStyle(sheetWithConfig, fmt.Sprintf("%s3", erCol), fmt.Sprintf("%s%d", erCol, lastRow), styleID); err != nil {
+				return "", err
+			}
+		}
+	}
+
+	if idx, err := f.GetSheetIndex(sheet); err == nil {
+		f.SetActiveSheet(idx)
 	}
 
 	// Create dir if not exists

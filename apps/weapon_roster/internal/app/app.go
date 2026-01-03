@@ -21,13 +21,22 @@ import (
 
 // Run executes the roster optimization flow and returns the desired process exit code.
 func Run() int {
+	return RunWithOptions(Options{})
+}
+
+type Options struct {
+	UseExamples bool
+}
+
+// RunWithOptions executes the roster optimization flow and returns the desired process exit code.
+func RunWithOptions(opts Options) int {
 	appRoot, err := FindRoot()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 
-	if err := run(appRoot); err != nil {
+	if err := run(appRoot, opts); err != nil {
 		if ee, ok := asExitError(err); ok {
 			if ee.Err != nil && ee.Code != 0 {
 				fmt.Fprintln(os.Stderr, ee.Err)
@@ -40,11 +49,14 @@ func Run() int {
 	return 0
 }
 
-func run(appRoot string) error {
+func run(appRoot string, opts Options) error {
 	totalStart := time.Now()
 
 	// Read config.txt
 	configPath := filepath.Join(appRoot, "input", "weapon_roster", "config.txt")
+	if opts.UseExamples {
+		configPath = filepath.Join(appRoot, "input", "weapon_roster", "examples", "config.exemple.txt")
+	}
 	configBytes, err := os.ReadFile(configPath)
 	if err != nil {
 		return fmt.Errorf("read config.txt (%s): %w", configPath, err)
@@ -54,6 +66,9 @@ func run(appRoot string) error {
 	// Read roster_config.yaml
 	var cfg domain.Config
 	rosterConfigPath := filepath.Join(appRoot, "input", "weapon_roster", "roster_config.yaml")
+	if opts.UseExamples {
+		rosterConfigPath = filepath.Join(appRoot, "input", "weapon_roster", "examples", "roster_config.exemple.yaml")
+	}
 	yamlBytes, err := os.ReadFile(rosterConfigPath)
 	if err != nil {
 		return fmt.Errorf("read roster_config.yaml (%s): %w", rosterConfigPath, err)
@@ -186,6 +201,7 @@ func run(appRoot string) error {
 				bestCharDps := 0
 				bestEr := 0.0
 				bestMainStats := ""
+				bestConfig := ""
 				for _, mainStats := range mainStatCombos {
 					newConfig, err := config.EditConfig(configStr, char, weapon, ref, mainStats)
 					if err != nil {
@@ -219,6 +235,7 @@ func run(appRoot string) error {
 						bestCharDps = charDps
 						bestEr = er
 						bestMainStats = mainStats
+						bestConfig = res.ConfigFile
 					}
 
 					// Progress: вывести процент завершения и ETA после каждой симуляции
@@ -238,7 +255,7 @@ func run(appRoot string) error {
 					}
 				}
 				// Save best result for this weapon+ref+variant
-				resultsByVariant[variantName] = append(resultsByVariant[variantName], domain.Result{Weapon: weapon, Refine: ref, TeamDps: bestTeamDps, CharDps: bestCharDps, Er: bestEr, MainStats: bestMainStats})
+				resultsByVariant[variantName] = append(resultsByVariant[variantName], domain.Result{Weapon: weapon, Refine: ref, TeamDps: bestTeamDps, CharDps: bestCharDps, Er: bestEr, MainStats: bestMainStats, Config: bestConfig})
 			}
 		}
 	}
@@ -265,6 +282,8 @@ func run(appRoot string) error {
 		appElapsed.Round(time.Second),
 		simElapsed.Round(time.Second),
 	)
+
+	fmt.Println("Finished at", time.Now().Format(time.RFC3339))
 
 	return nil
 }
