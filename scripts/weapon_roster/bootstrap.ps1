@@ -26,6 +26,21 @@ function Invoke-Step {
   & $Action
 }
 
+function Invoke-InDir {
+  param(
+    [Parameter(Mandatory = $true)][string]$Directory,
+    [Parameter(Mandatory = $true)][scriptblock]$Action
+  )
+
+  Push-Location $Directory
+  try {
+    & $Action
+  }
+  finally {
+    Pop-Location
+  }
+}
+
 Assert-Command -Name 'git'
 Assert-Command -Name 'go'
 
@@ -72,16 +87,16 @@ try {
   }
 
   Invoke-Step -Title 'Download Go modules' -Action {
-    & go -C (Join-Path $repoRoot 'apps' 'weapon_roster') mod download
+    Invoke-InDir -Directory (Join-Path $repoRoot (Join-Path 'apps' 'weapon_roster')) -Action { & go mod download }
 
-    & go -C (Join-Path $repoRoot 'engines' 'gcsim') mod download
-    & go -C (Join-Path $repoRoot 'engines' 'wfpsim') mod download
-    & go -C (Join-Path $repoRoot 'engines' 'custom') mod download
+    Invoke-InDir -Directory (Join-Path $repoRoot (Join-Path 'engines' 'gcsim')) -Action { & go mod download }
+    Invoke-InDir -Directory (Join-Path $repoRoot (Join-Path 'engines' 'wfpsim')) -Action { & go mod download }
+    Invoke-InDir -Directory (Join-Path $repoRoot (Join-Path 'engines' 'custom')) -Action { & go mod download }
   }
 
   Invoke-Step -Title 'Build roster.exe' -Action {
     $appDir = Join-Path $repoRoot (Join-Path 'apps' 'weapon_roster')
-    & go -C $appDir build -o 'roster.exe' './cmd/weapon_roster'
+    Invoke-InDir -Directory $appDir -Action { & go build -o 'roster.exe' './cmd/weapon_roster' }
   }
 
   Invoke-Step -Title 'Build engine CLIs' -Action {
