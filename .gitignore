@@ -1,7 +1,7 @@
-﻿output/
-work/
-input/**
-!input/*/
-!input/*/examples/
-!input/*/examples/**
+﻿/output/
+/work/
+/input/**
+!/input/*/
+!/input/*/examples/
+!/input/*/examples/**
 *.exe
