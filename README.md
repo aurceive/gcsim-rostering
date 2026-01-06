@@ -22,3 +22,26 @@
 
 - Основной: `apps/weapon_roster/roster.exe`
 - На примерах: `apps/weapon_roster/roster.exe -useExamples`
+
+## Grow roster (Windows / PowerShell)
+
+### 1 Актуализировать + подгрузить зависимости + собрать
+
+- `scripts/grow_roster/bootstrap.ps1`
+
+Скрипт:
+
+- обновляет сабмодули
+- скачивает Go-пакеты во всех Go-модулях
+- собирает `apps/grow_roster/grow_roster.exe`
+- собирает CLI движков
+
+### 2 Настроить
+
+- Заполните `input/grow_roster/config.txt`
+- Проверьте настройки в `input/grow_roster/roster_config.yaml`.
+
+### 3 Запустить
+
+- Основной: `apps/grow_roster/grow_roster.exe`
+- На примерах: `apps/grow_roster/grow_roster.exe -useExamples`

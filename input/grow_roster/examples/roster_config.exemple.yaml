@@ -23,12 +23,12 @@ investment_levels:
       total_liquid_substats: 20
       indiv_liquid_cap: 10
       fixed_substats_count: 2
-  - name: mid
+  - name: high
     options:
       total_liquid_substats: 30
       indiv_liquid_cap: 12
       fixed_substats_count: 1
-  - name: high
+  - name: hyper
     options:
       total_liquid_substats: 40
       indiv_liquid_cap: 15
