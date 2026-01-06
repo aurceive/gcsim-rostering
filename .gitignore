@@ -1,6 +1,7 @@
-﻿output/weapon_roster/
+﻿output/
 work/
+input/**
+!input/*/
+!input/*/examples/
+!input/*/examples/**
 *.exe
-
-input/weapon_roster/config.txt
-input/weapon_roster/roster_config.yaml
