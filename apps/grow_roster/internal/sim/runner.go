@@ -41,7 +41,6 @@ type SimulationResult struct {
 }
 
 // CLIRunner runs an engine via its gcsim.exe CLI.
-// Expected layout (as produced by scripts/build-engine-clis.ps1): <repoRoot>/engines/bins/<engine>/gcsim.exe.
 type CLIRunner struct {
 	EngineRoot string
 }
@@ -114,7 +113,7 @@ func resolveEngineCLI(engineRoot string) (string, error) {
 		if _, err := os.Stat(bins); err == nil {
 			return bins, nil
 		}
-		return "", fmt.Errorf("cannot find engine CLI at %q (run scripts/build-engine-clis.ps1)", bins)
+		return "", fmt.Errorf("cannot find engine CLI at %q (run scripts/engines/bootstrap.ps1)", bins)
 	}
 	return "", fmt.Errorf("engine root %q is not under an 'engines' directory; cannot derive engines/bins path", engineRoot)
 }

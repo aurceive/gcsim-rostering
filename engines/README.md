@@ -16,7 +16,7 @@
 
 ### Вариант 1: скриптом (PowerShell)
 
-- `../scripts/submodules/update-submodules.ps1`
+- `../scripts/engines/update-submodules.ps1`
 
 ### Вариант 2: команды Git (PowerShell)
 
@@ -39,7 +39,11 @@
 ### Вариант 1: сборка скриптом (PowerShell)
 
 - Собрать все 3 движка (gcsim/wfpsim/custom) и цели `gcsim`, `repl`, `server`:
-  - `../scripts/submodules/build-engine-clis.ps1`
+  - `../scripts/engines/build-engine-clis.ps1`
+
+Также можно использовать общий скрипт (обновление сабмодулей + download + сборка CLI):
+
+- `../scripts/engines/bootstrap.ps1`
 
 Примеры результата (пути):
 

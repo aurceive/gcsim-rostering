@@ -28,4 +28,6 @@
 
 ## Сборка движков
 
-См. `engines/README.md` (есть варианты через скрипт и ручные команды).
+См. `engines/README.md`. Основной вариант скриптом:
+
+- `scripts/engines/bootstrap.ps1`

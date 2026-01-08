@@ -44,10 +44,6 @@ function Invoke-InDir {
 Assert-Command -Name 'git'
 Assert-Command -Name 'go'
 
-$submodulesDir = Join-Path (Join-Path $PSScriptRoot '..') 'submodules'
-$updateSubmodulesScript = Join-Path $submodulesDir 'update-submodules.ps1'
-$buildEngineClisScript = Join-Path $submodulesDir 'build-engine-clis.ps1'
-
 $weaponRosterInputDir = Join-Path $repoRoot (Join-Path 'input' 'weapon_roster')
 $weaponRosterExamplesDir = Join-Path $weaponRosterInputDir 'examples'
 
@@ -58,8 +54,8 @@ function Ensure-WeaponRosterConfigs {
   New-Item -ItemType Directory -Force -Path $weaponRosterInputDir | Out-Null
 
   $pairs = @(
-    @{ Name = 'config.txt'; Example = (Join-Path $weaponRosterExamplesDir 'config.exemple.txt') },
-    @{ Name = 'roster_config.yaml'; Example = (Join-Path $weaponRosterExamplesDir 'roster_config.exemple.yaml') }
+    @{ Name = 'config.txt'; Example = (Join-Path $weaponRosterExamplesDir 'config.example.txt') },
+    @{ Name = 'roster_config.yaml'; Example = (Join-Path $weaponRosterExamplesDir 'roster_config.example.yaml') }
   )
 
   foreach ($p in $pairs) {
@@ -78,30 +74,17 @@ function Ensure-WeaponRosterConfigs {
 
 Push-Location $repoRoot
 try {
-  Invoke-Step -Title 'Update submodules' -Action {
-    & $updateSubmodulesScript
-  }
-
   Invoke-Step -Title 'Ensure weapon_roster configs exist' -Action {
     Ensure-WeaponRosterConfigs
   }
 
   Invoke-Step -Title 'Download Go modules' -Action {
     Invoke-InDir -Directory (Join-Path $repoRoot (Join-Path 'apps' 'weapon_roster')) -Action { & go mod download }
-
-    Invoke-InDir -Directory (Join-Path $repoRoot (Join-Path 'engines' 'gcsim')) -Action { & go mod download }
-    Invoke-InDir -Directory (Join-Path $repoRoot (Join-Path 'engines' 'wfpsim')) -Action { & go mod download }
-    Invoke-InDir -Directory (Join-Path $repoRoot (Join-Path 'engines' 'custom')) -Action { & go mod download }
   }
 
   Invoke-Step -Title 'Build roster.exe' -Action {
     $appDir = Join-Path $repoRoot (Join-Path 'apps' 'weapon_roster')
     Invoke-InDir -Directory $appDir -Action { & go build -o 'roster.exe' './cmd/weapon_roster' }
-  }
-
-  Invoke-Step -Title 'Build engine CLIs' -Action {
-    # weapon_roster only requires gcsim.exe; repl.exe/server.exe are not used.
-    & $buildEngineClisScript -Engine 'all' -Targets @('gcsim')
   }
 
   Write-Host 'Done.'

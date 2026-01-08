@@ -44,10 +44,6 @@ function Invoke-InDir {
 Assert-Command -Name 'git'
 Assert-Command -Name 'go'
 
-$submodulesDir = Join-Path (Join-Path $PSScriptRoot '..') 'submodules'
-$updateSubmodulesScript = Join-Path $submodulesDir 'update-submodules.ps1'
-$buildEngineClisScript = Join-Path $submodulesDir 'build-engine-clis.ps1'
-
 $growRosterInputDir = Join-Path $repoRoot (Join-Path 'input' 'grow_roster')
 $growRosterExamplesDir = Join-Path $growRosterInputDir 'examples'
 
@@ -58,8 +54,8 @@ function Ensure-GrowRosterConfigs {
   New-Item -ItemType Directory -Force -Path $growRosterInputDir | Out-Null
 
   $pairs = @(
-    @{ Name = 'config.txt'; Example = (Join-Path $growRosterExamplesDir 'config.exemple.txt') },
-    @{ Name = 'roster_config.yaml'; Example = (Join-Path $growRosterExamplesDir 'roster_config.exemple.yaml') }
+    @{ Name = 'config.txt'; Example = (Join-Path $growRosterExamplesDir 'config.example.txt') },
+    @{ Name = 'roster_config.yaml'; Example = (Join-Path $growRosterExamplesDir 'roster_config.example.yaml') }
   )
 
   foreach ($p in $pairs) {
@@ -78,30 +74,17 @@ function Ensure-GrowRosterConfigs {
 
 Push-Location $repoRoot
 try {
-  Invoke-Step -Title 'Update submodules' -Action {
-    & $updateSubmodulesScript
-  }
-
   Invoke-Step -Title 'Ensure grow_roster configs exist' -Action {
     Ensure-GrowRosterConfigs
   }
 
   Invoke-Step -Title 'Download Go modules' -Action {
     Invoke-InDir -Directory (Join-Path $repoRoot (Join-Path 'apps' 'grow_roster')) -Action { & go mod download }
-
-    Invoke-InDir -Directory (Join-Path $repoRoot (Join-Path 'engines' 'gcsim')) -Action { & go mod download }
-    Invoke-InDir -Directory (Join-Path $repoRoot (Join-Path 'engines' 'wfpsim')) -Action { & go mod download }
-    Invoke-InDir -Directory (Join-Path $repoRoot (Join-Path 'engines' 'custom')) -Action { & go mod download }
   }
 
   Invoke-Step -Title 'Build grow_roster.exe' -Action {
     $appDir = Join-Path $repoRoot (Join-Path 'apps' 'grow_roster')
     Invoke-InDir -Directory $appDir -Action { & go build -o 'grow_roster.exe' './cmd/grow_roster' }
-  }
-
-  Invoke-Step -Title 'Build engine CLIs' -Action {
-    # grow_roster requires gcsim.exe; repl.exe/server.exe are not used.
-    & $buildEngineClisScript -Engine 'all' -Targets @('gcsim')
   }
 
   Write-Host 'Done.'

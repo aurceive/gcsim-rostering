@@ -1,47 +1,38 @@
 ﻿# Rostering Application
 
-## Weapon roster (Windows / PowerShell)
+## Пайплайн (Windows / PowerShell)
 
-### 1 Актуализировать + подгрузить зависимости + собрать
+### 1 Обновление и сборка движков (если требуется)
 
-- `scripts/weapon_roster/bootstrap.ps1`
-
-Скрипт:
-
-- обновляет сабмодули
-- скачивает Go-пакеты во всех Go-модулях
-- собирает `apps/weapon_roster/roster.exe`
-- собирает CLI движков
-
-### 2 Настроить
-
-- Заполните `input/weapon_roster/config.txt`
-- Проверьте настройки в `input/weapon_roster/roster_config.yaml`.
-
-### 3 Запустить
-
-- Основной: `apps/weapon_roster/roster.exe`
-- На примерах: `apps/weapon_roster/roster.exe -useExamples`
-
-## Grow roster (Windows / PowerShell)
-
-### 1 Актуализировать + подгрузить зависимости + собрать
-
-- `scripts/grow_roster/bootstrap.ps1`
+- `scripts/engines/bootstrap.ps1`
 
 Скрипт:
 
 - обновляет сабмодули
-- скачивает Go-пакеты во всех Go-модулях
-- собирает `apps/grow_roster/grow_roster.exe`
-- собирает CLI движков
+- скачивает Go-пакеты для движков
+- собирает CLI движков в `engines/bins/<engine>/`
 
-### 2 Настроить
+### 2 Сборка интересующего приложения
 
-- Заполните `input/grow_roster/config.txt`
-- Проверьте настройки в `input/grow_roster/roster_config.yaml`.
+- weapon_roster: `scripts/weapon_roster/bootstrap.ps1`
+- grow_roster: `scripts/grow_roster/bootstrap.ps1`
 
-### 3 Запустить
+Скрипт приложения:
 
-- Основной: `apps/grow_roster/grow_roster.exe`
-- На примерах: `apps/grow_roster/grow_roster.exe -useExamples`
+- создаёт `input/<app>/config.txt` и `input/<app>/roster_config.yaml` из `input/<app>/examples/`, если файлов ещё нет
+- скачивает Go-пакеты только для приложения
+- собирает бинарник приложения в `apps/<app>/`
+
+### 3 Настройка конфигов приложения
+
+- Заполните/отредактируйте `input/<app>/config.txt`
+- Проверьте/отредактируйте `input/<app>/roster_config.yaml`
+
+### 4 Запуск интересующего приложения
+
+- weapon_roster:
+	- основной: `apps/weapon_roster/roster.exe`
+	- на примерах: `apps/weapon_roster/roster.exe -useExamples`
+- grow_roster:
+	- основной: `apps/grow_roster/grow_roster.exe`
+	- на примерах: `apps/grow_roster/grow_roster.exe -useExamples`

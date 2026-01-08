@@ -55,7 +55,7 @@ func run(appRoot string, opts Options) error {
 	// Read config.txt
 	configPath := filepath.Join(appRoot, "input", "weapon_roster", "config.txt")
 	if opts.UseExamples {
-		configPath = filepath.Join(appRoot, "input", "weapon_roster", "examples", "config.exemple.txt")
+		configPath = filepath.Join(appRoot, "input", "weapon_roster", "examples", "config.example.txt")
 	}
 	configBytes, err := os.ReadFile(configPath)
 	if err != nil {
@@ -67,7 +67,7 @@ func run(appRoot string, opts Options) error {
 	var cfg domain.Config
 	rosterConfigPath := filepath.Join(appRoot, "input", "weapon_roster", "roster_config.yaml")
 	if opts.UseExamples {
-		rosterConfigPath = filepath.Join(appRoot, "input", "weapon_roster", "examples", "roster_config.exemple.yaml")
+		rosterConfigPath = filepath.Join(appRoot, "input", "weapon_roster", "examples", "roster_config.example.yaml")
 	}
 	yamlBytes, err := os.ReadFile(rosterConfigPath)
 	if err != nil {

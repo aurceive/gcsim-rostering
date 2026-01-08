@@ -55,8 +55,8 @@ func run(appRoot string, opts Options) error {
 	configPath := filepath.Join(appRoot, "input", "grow_roster", "config.txt")
 	rosterConfigPath := filepath.Join(appRoot, "input", "grow_roster", "roster_config.yaml")
 	if opts.UseExamples {
-		configPath = filepath.Join(appRoot, "input", "grow_roster", "examples", "config.exemple.txt")
-		rosterConfigPath = filepath.Join(appRoot, "input", "grow_roster", "examples", "roster_config.exemple.yaml")
+		configPath = filepath.Join(appRoot, "input", "grow_roster", "examples", "config.example.txt")
+		rosterConfigPath = filepath.Join(appRoot, "input", "grow_roster", "examples", "roster_config.example.yaml")
 	}
 
 	configBytes, err := os.ReadFile(configPath)
