@@ -1,0 +1,8 @@
+{
+  // Keep Markdown style sane for this repo.
+  // Default markdownlint rules are enabled unless overridden below.
+  "default": true,
+
+  // Line length is not enforced: command lines, paths, and technical docs routinely exceed 80.
+  "MD013": false
+}

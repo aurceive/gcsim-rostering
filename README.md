@@ -1,5 +1,7 @@
 ﻿# Rostering Application
 
+Правила организации структуры репозитория: [docs/repo-structure.md](docs/repo-structure.md)
+
 ## Пайплайн (Windows / PowerShell)
 
 ### 1 Обновление и сборка движков (если требуется)
@@ -31,8 +33,10 @@
 ### 4 Запуск интересующего приложения
 
 - weapon_roster:
-	- основной: `apps/weapon_roster/roster.exe`
-	- на примерах: `apps/weapon_roster/roster.exe -useExamples`
+
+  - основной: `apps/weapon_roster/roster.exe`
+  - на примерах: `apps/weapon_roster/roster.exe -useExamples`
 - grow_roster:
-	- основной: `apps/grow_roster/grow_roster.exe`
-	- на примерах: `apps/grow_roster/grow_roster.exe -useExamples`
+
+  - основной: `apps/grow_roster/grow_roster.exe`
+  - на примерах: `apps/grow_roster/grow_roster.exe -useExamples`

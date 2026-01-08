@@ -1,0 +1,7 @@
+# Ignore engine submodules (but keep engines/README.md linted)
+engines/*/**
+
+# Common build/dependency folders (defensive)
+**/node_modules/**
+**/dist/**
+**/build/**
