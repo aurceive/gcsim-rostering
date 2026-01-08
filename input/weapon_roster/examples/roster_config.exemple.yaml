@@ -10,8 +10,17 @@ target:
 #  - team_dps
 
 substat_optimizer_variants:
-  - name: default
-  - name: high_investment
+  - name: kqms
+    options:
+      total_liquid_substats: 20
+      indiv_liquid_cap: 10
+      fixed_substats_count: 2
+  - name: high
+    options:
+      total_liquid_substats: 30
+      indiv_liquid_cap: 12
+      fixed_substats_count: 1
+  - name: hyper
     options:
       total_liquid_substats: 40
       indiv_liquid_cap: 15
