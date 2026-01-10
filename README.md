@@ -18,6 +18,7 @@
 
 - weapon_roster: `scripts/weapon_roster/bootstrap.ps1`
 - grow_roster: `scripts/grow_roster/bootstrap.ps1`
+- wfpsim_discord_archiver: `scripts/wfpsim_discord_archiver/bootstrap.ps1`
 
 Скрипт приложения:
 
@@ -29,6 +30,7 @@
 
 - Заполните/отредактируйте `input/<app>/config.txt`
 - Проверьте/отредактируйте `input/<app>/roster_config.yaml`
+- Для wfpsim_discord_archiver: отредактируйте `input/wfpsim_discord_archiver/config.yaml`
 
 ### 4 Запуск интересующего приложения
 
@@ -40,3 +42,6 @@
 
   - основной: `apps/grow_roster/grow_roster.exe`
   - на примерах: `apps/grow_roster/grow_roster.exe -useExamples`
+- wfpsim_discord_archiver:
+
+  - основной: `apps/wfpsim_discord_archiver/wfpsim_discord_archiver.exe`

@@ -1,0 +1,28 @@
+# Configuration example for wfpsim_discord_archiver application.
+# Place the actual config in input/wfpsim_discord_archiver/config.yaml (it won't be committed to git).
+
+discord:
+  token: DISCORD_TOKEN # DO NOT COMMIT ACTUAL TOKEN
+  serverId: 123456789012345678
+  channelIds:
+    - 111111111111111111
+    - 222222222222222222
+
+appsScript:
+  webAppUrl: https://script.google.com/macros/s/DEPLOYMENT_ID/exec
+  apiKey: APPS_SCRIPT_API_KEY # DO NOT COMMIT ACTUAL KEY
+
+sheet:
+  id: SPREADSHEET_ID
+  name: wfpsim
+
+run:
+  # channelHistory (default) | guildSearch (experimental; may be blocked for bot tokens)
+  mode: channelHistory
+  # mode: guildSearch
+  sinceDays: 3
+  stateFile: work/wfpsim_discord_archiver_state.json
+  # Ignore state checkpoints and scan the whole sinceDays window.
+  ignoreStateCheckpoint: false
+  dryRun: true
+  # dryRun: false
