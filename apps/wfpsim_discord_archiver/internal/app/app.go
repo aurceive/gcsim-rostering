@@ -2,15 +2,19 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/config"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/discord"
+	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/localxlsx"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/sheetsapi"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/state"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/wfpsim"
@@ -18,17 +22,28 @@ import (
 
 var shareURLRe = regexp.MustCompile(`https?://wfpsim\.com/sh/(?P<key>[0-9a-fA-F-]{36})`)
 
+// Example line in config_file:
+//
+//	flins char lvl=90/90 cons=0 talent=9,9,9;
+var cfgConsRe = regexp.MustCompile(`(?mi)^\s*([a-z0-9_\-]+)\s+char\b[^\r\n]*?\bcons\s*=\s*(\d+)`)
+
 func Run(ctx context.Context, cfg config.Config) error {
 	fmt.Printf("Starting wfpsim_discord_archiver...\n")
 	if cfg.Run.DryRun {
-		fmt.Printf("Dry-run mode: no writes to Google Sheets\n")
+		fmt.Printf("Dry-run mode: no writes to Google Sheets (local XLSX still written)\n")
 	}
 
-	st, err := state.Load(cfg.Run.StateFile)
+	loaded, err := state.Load(cfg.Run.StateFile)
 	if err != nil {
 		return fmt.Errorf("load state: %w", err)
 	}
+	st := loaded
 	pruneProcessedKeys(&st, 120*24*time.Hour)
+	if cfg.Run.IgnoreStateCheckpoint {
+		fmt.Printf("ignoreStateCheckpoint=true: ignoring channel/search checkpoints (ProcessedKeys still used and saved)\n")
+		st.Channels = map[string]state.ChannelState{}
+		st.LastSearchID = ""
+	}
 	st.LastRunStarted = time.Now()
 
 	dc, err := discord.New(cfg.Discord.Token, cfg.Discord.ServerID)
@@ -37,25 +52,33 @@ func Run(ctx context.Context, cfg config.Config) error {
 	}
 	defer dc.Close()
 
-	var writer rowWriter
+	localPath := filepath.Clean(filepath.Join("output", "wfpsim_discord_archiver", "archive.xlsx"))
+	localWriter := localxlsx.New(localPath, cfg.Sheet.Name)
+
+	writers := make([]rowWriter, 0, 3)
+	// Local XLSX is always written.
+	writers = append(writers, localWriter)
+	// In dry-run, also print what would be appended.
 	if cfg.Run.DryRun {
-		writer = dryRunWriter{}
+		writers = append(writers, dryRunWriter{})
 	} else {
 		if strings.TrimSpace(cfg.AppsScript.WebAppURL) == "" {
 			return fmt.Errorf("appsScript.webAppUrl is required when dryRun=false")
 		}
-		writer = sheetsapi.New(cfg.AppsScript.WebAppURL, cfg.AppsScript.APIKey, cfg.Sheet.ID, cfg.Sheet.Name)
+		writers = append(writers, sheetsapi.New(cfg.AppsScript.WebAppURL, cfg.AppsScript.APIKey, cfg.Sheet.ID, cfg.Sheet.Name))
 	}
+	writer := multiWriter{writers: writers}
 
 	wc := wfpsim.New()
 
 	totalNewKeys := 0
 	cutoff := time.Now().Add(-time.Duration(cfg.Run.SinceDays) * 24 * time.Hour)
+	seenKeys := map[string]struct{}{}
 
 	if cfg.Run.Mode == "guildSearch" {
 		fmt.Printf("Using run.mode=guildSearch\n")
 		msgStopAfter := ""
-		if !cfg.Run.DryRun && !cfg.Run.IgnoreStateCheckpoint {
+		if !cfg.Run.IgnoreStateCheckpoint {
 			msgStopAfter = st.LastSearchID
 		}
 
@@ -77,6 +100,10 @@ func Run(ctx context.Context, cfg config.Config) error {
 				continue
 			}
 			for _, key := range keys {
+				if _, ok := seenKeys[key]; ok {
+					continue
+				}
+				seenKeys[key] = struct{}{}
 				if _, ok := st.ProcessedKeys[key]; ok {
 					continue
 				}
@@ -94,13 +121,11 @@ func Run(ctx context.Context, cfg config.Config) error {
 				}
 
 				totalNewKeys++
-				if !cfg.Run.DryRun {
-					st.ProcessedKeys[key] = time.Now()
-				}
+				st.ProcessedKeys[key] = time.Now()
 			}
 		}
 
-		if !cfg.Run.DryRun {
+		if !cfg.Run.IgnoreStateCheckpoint {
 			if newestSeen != "" {
 				st.LastSearchID = newestSeen
 			}
@@ -130,6 +155,10 @@ func Run(ctx context.Context, cfg config.Config) error {
 			}
 
 			for _, key := range keys {
+				if _, ok := seenKeys[key]; ok {
+					continue
+				}
+				seenKeys[key] = struct{}{}
 				if _, ok := st.ProcessedKeys[key]; ok {
 					continue
 				}
@@ -149,15 +178,13 @@ func Run(ctx context.Context, cfg config.Config) error {
 
 				totalNewKeys++
 				channelNewKeys++
-				if !cfg.Run.DryRun {
-					st.ProcessedKeys[key] = time.Now()
-				}
+				st.ProcessedKeys[key] = time.Now()
 			}
 		}
 		fmt.Printf("Processed %d new keys from channel %s\n", channelNewKeys, chID)
 
 		// Update channel state
-		if !cfg.Run.DryRun {
+		if !cfg.Run.IgnoreStateCheckpoint {
 			if newestSeen != "" {
 				st.Channels[chID] = state.ChannelState{LastSeenMessageID: newestSeen, LastSeenAt: time.Now()}
 			}
@@ -167,14 +194,46 @@ func Run(ctx context.Context, cfg config.Config) error {
 finalize:
 	st.LastRunEnded = time.Now()
 	if !cfg.Run.DryRun {
-		if err := state.Save(cfg.Run.StateFile, st); err != nil {
-			return fmt.Errorf("save state: %w", err)
+		if cfg.Run.IgnoreStateCheckpoint {
+			if err := saveProcessedKeysOnly(cfg.Run.StateFile, st.ProcessedKeys); err != nil {
+				return fmt.Errorf("save state (processed keys only): %w", err)
+			}
+			fmt.Printf("done. new keys: %d. state (processed keys only): %s\n", totalNewKeys, cfg.Run.StateFile)
+		} else {
+			if err := state.Save(cfg.Run.StateFile, st); err != nil {
+				return fmt.Errorf("save state: %w", err)
+			}
+			fmt.Printf("done. new keys: %d. state: %s\n", totalNewKeys, cfg.Run.StateFile)
 		}
-		fmt.Printf("done. new keys: %d. state: %s\n", totalNewKeys, cfg.Run.StateFile)
 	} else {
-		fmt.Printf("dry-run done. new keys: %d. state not written\n", totalNewKeys)
+		fmt.Printf("done. new keys: %d. state not written (dry-run)\n", totalNewKeys)
 	}
 	return nil
+}
+
+type processedKeysOnlyState struct {
+	ProcessedKeys map[string]time.Time `json:"processedKeys"`
+}
+
+func saveProcessedKeysOnly(path string, keys map[string]time.Time) error {
+	if keys == nil {
+		keys = map[string]time.Time{}
+	}
+	b, err := json.MarshalIndent(processedKeysOnlyState{ProcessedKeys: keys}, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 func pruneProcessedKeys(st *state.State, maxAge time.Duration) {
@@ -233,9 +292,16 @@ func buildRow(guildID string, m discord.Message, key string, share wfpsim.Share)
 
 	chars := make([]string, 0, len(pairs))
 	weps := make([]string, 0, len(pairs))
+	consByChar := parseConsByChar(share.ConfigFile)
+	cons := make([]string, 0, len(pairs))
 	for _, p := range pairs {
 		chars = append(chars, p.char)
 		weps = append(weps, p.weapon)
+		if v, ok := consByChar[strings.ToLower(p.char)]; ok {
+			cons = append(cons, fmt.Sprintf("C%d", v))
+		} else {
+			cons = append(cons, "")
+		}
 	}
 
 	shareURL := fmt.Sprintf("https://wfpsim.com/sh/%s", key)
@@ -258,11 +324,51 @@ func buildRow(guildID string, m discord.Message, key string, share wfpsim.Share)
 		share.SimVersion,
 		share.SchemaVersion.Major,
 		share.SchemaVersion.Minor,
+		strings.Join(cons, ","),
 	}
+}
+
+func parseConsByChar(configFile string) map[string]int {
+	out := map[string]int{}
+	if strings.TrimSpace(configFile) == "" {
+		return out
+	}
+	matches := cfgConsRe.FindAllStringSubmatch(configFile, -1)
+	for _, m := range matches {
+		if len(m) < 3 {
+			continue
+		}
+		name := strings.ToLower(strings.TrimSpace(m[1]))
+		if name == "" {
+			continue
+		}
+		v, err := strconv.Atoi(strings.TrimSpace(m[2]))
+		if err != nil {
+			continue
+		}
+		out[name] = v
+	}
+	return out
 }
 
 type rowWriter interface {
 	AppendRow(ctx context.Context, row []interface{}, key string, messageID string) error
+}
+
+type multiWriter struct {
+	writers []rowWriter
+}
+
+func (m multiWriter) AppendRow(ctx context.Context, row []interface{}, key string, messageID string) error {
+	for _, w := range m.writers {
+		if w == nil {
+			continue
+		}
+		if err := w.AppendRow(ctx, row, key, messageID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type dryRunWriter struct{}

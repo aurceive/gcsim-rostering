@@ -13,7 +13,11 @@ appsScript:
   apiKey: APPS_SCRIPT_API_KEY # DO NOT COMMIT ACTUAL KEY
 
 sheet:
+  # SPREADSHEET_ID is the Google Sheets document id.
+  # Take it from the URL:
+  # https://docs.google.com/spreadsheets/d/<SPREADSHEET_ID>/edit#gid=...
   id: SPREADSHEET_ID
+  # Sheet tab name (not the document title). This tab will be created if missing.
   name: wfpsim
 
 run:
@@ -22,7 +26,8 @@ run:
   # mode: guildSearch
   sinceDays: 3
   stateFile: work/wfpsim_discord_archiver_state.json
-  # Ignore state checkpoints and scan the whole sinceDays window.
+  # Ignore channel/guild checkpoints (scan the whole sinceDays window),
+  # but still use/save processedKeys to avoid refetching the same shares.
   ignoreStateCheckpoint: false
   dryRun: true
   # dryRun: false
