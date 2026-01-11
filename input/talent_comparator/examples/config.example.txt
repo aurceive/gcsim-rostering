@@ -1,3 +1,7 @@
+# Пример gcsim-конфига для talent_comparator.
+# Важно: талант меняется в строке вида:
+# <char> char lvl=... cons=... talent=A,E,Q;
+
 arlecchino char lvl=90/90 cons=0 talent=9,9,9 ;
 arlecchino add weapon="deathmatch" refine=1 lvl=90/90;
 arlecchino add set="fohw" count=4;

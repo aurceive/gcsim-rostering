@@ -1,0 +1,13 @@
+# Настройки приложения talent_comparator
+#
+# char: ключ персонажа в gcsim-конфиге (первый токен в строке '<char> char ...')
+# name: произвольное имя прогона (пойдёт в имя xlsx)
+# engine/engine_path: по умолчанию используется engines/gcsim
+
+engine: gcsim
+# engine: wfpsim
+# engine: custom
+# engine_path: "C:/path/to/your/engines/gcsim"  # опционально
+
+char: arlecchino
+name: demo
