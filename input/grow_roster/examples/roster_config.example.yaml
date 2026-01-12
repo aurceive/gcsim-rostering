@@ -1,5 +1,6 @@
 # engine: gcsim
 engine: wfpsim
+# engine: wfpsim-custom
 # engine: custom
 
 # character to read char_dps from and (optionally) override main stats for.

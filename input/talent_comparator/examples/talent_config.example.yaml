@@ -6,6 +6,7 @@
 
 engine: gcsim
 # engine: wfpsim
+# engine: wfpsim-custom
 # engine: custom
 # engine_path: "C:/path/to/your/engines/gcsim"  # опционально
 

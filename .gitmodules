@@ -13,3 +13,7 @@
 	url = https://github.com/ancientdialogue/wfpsim.git
 	branch = develop
 	shallow = true
+[submodule "engines/wfpsim-custom"]
+	path = engines/wfpsim-custom
+	url = https://github.com/aurceive/gcsim.git
+	branch = wfpsim-custom

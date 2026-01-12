@@ -9,6 +9,7 @@
 - `engines/gcsim` → `main`
 - `engines/wfpsim` → `develop`
 - `engines/custom` → `custom`
+- `engines/wfpsim-custom` → `wfpsim-custom`
 
 Примечание: если указанная ветка отсутствует на `origin`, скрипт обновления использует fallback на `origin/HEAD`.
 
@@ -31,6 +32,7 @@
 - `go -C gcsim mod download`
 - `go -C wfpsim mod download`
 - `go -C custom mod download`
+- `go -C wfpsim-custom mod download`
 
 ## Сборка CLI движков
 
@@ -41,6 +43,9 @@
 - Собрать все 3 движка (gcsim/wfpsim/custom) и цели `gcsim`, `repl`, `server`:
   - `../scripts/engines/build-engine-clis.ps1`
 
+- Собрать все 4 движка (gcsim/wfpsim/custom/wfpsim-custom):
+  - `../scripts/engines/build-engine-clis.ps1 -Engine all`
+
 Также можно использовать общий скрипт (обновление сабмодулей + download + сборка CLI):
 
 - `../scripts/engines/bootstrap.ps1`
@@ -50,6 +55,7 @@
 - `bins/gcsim/gcsim.exe`
 - `bins/wfpsim/gcsim.exe`
 - `bins/custom/gcsim.exe`
+- `bins/wfpsim-custom/gcsim.exe`
 
 ### Вариант 2: вручную (PowerShell)
 
@@ -59,3 +65,5 @@
   - `go -C wfpsim build -o ..\bins\wfpsim\gcsim.exe ./cmd/gcsim`
 - custom:
   - `go -C custom build -o ..\bins\custom\gcsim.exe ./cmd/gcsim`
+- wfpsim-custom:
+  - `go -C wfpsim-custom build -o ..\bins\wfpsim-custom\gcsim.exe ./cmd/gcsim`

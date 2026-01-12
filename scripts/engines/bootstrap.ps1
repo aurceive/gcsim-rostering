@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('gcsim','wfpsim','custom','all')]
+  [ValidateSet('gcsim','wfpsim','custom','wfpsim-custom','all')]
   [string]$Engine = 'all',
 
   [string[]]$Targets = @('gcsim')
@@ -53,7 +53,8 @@ function Get-EngineDirs {
     'gcsim'  = @('gcsim')
     'wfpsim' = @('wfpsim')
     'custom' = @('custom')
-    'all'    = @('gcsim','wfpsim','custom')
+    'wfpsim-custom' = @('wfpsim-custom')
+    'all'    = @('gcsim','wfpsim','custom','wfpsim-custom')
   }
 
   return $map[$engine] | ForEach-Object { Join-Path $repoRoot (Join-Path 'engines' $_) }

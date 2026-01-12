@@ -1,5 +1,6 @@
 # engine: gcsim
 engine: wfpsim
+# engine: wfpsim-custom
 # engine: custom
 
 char: fischl
