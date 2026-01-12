@@ -94,6 +94,7 @@ func run(appRoot string, opts Options) error {
 	runner := sim.CLIRunner{EngineRoot: engineRoot}
 
 	baseline := domain.TalentLevels{NA: 6, E: 6, Q: 6}
+	startProgress := time.Now()
 	baselineRes, simElapsed, err := runOnce(context.Background(), runner, configStr, tempConfig, character, baseline)
 	if err != nil {
 		return err
@@ -101,7 +102,6 @@ func run(appRoot string, opts Options) error {
 
 	totalRuns := 5 + 4 + 4 + 4
 	completed := 1
-	startProgress := time.Now()
 	lastProgressPrint := time.Time{}
 	maybePrintProgress(completed, totalRuns, startProgress, &lastProgressPrint)
 
