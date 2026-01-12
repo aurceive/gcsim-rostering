@@ -3,7 +3,8 @@ param(
   [switch]$Init,
   [switch]$Remote,
   [switch]$Shallow,
-  [switch]$Recursive
+  [switch]$Recursive,
+  [switch]$MaxThin
 )
 
 Set-StrictMode -Version Latest
@@ -87,9 +88,23 @@ try {
       $want = Invoke-GitOutput -WorkingDirectory $repoRoot config -f (Join-Path $repoRoot '.gitmodules') --get "submodule.$subPath.branch"
 
       # Keep it shallow by default; safe for local "latest" usage.
-      $fetchArgs = @('-C', $fullPath, 'fetch', '-q', 'origin', '--prune')
-      if ($Shallow) { $fetchArgs += @('--depth', '1') }
-      & git @fetchArgs | Out-Null
+      # NOTE: A `--depth 1` clone is typically a *single-branch* clone, which means
+      # `origin/<branch>` may not exist for non-default branches unless we fetch it explicitly.
+      if ($want) {
+        $fetchArgs = @(
+          '-C', $fullPath,
+          'fetch', '-q', 'origin', '--prune',
+          '--no-tags',
+          "refs/heads/${want}:refs/remotes/origin/${want}"
+        )
+        if ($Shallow) { $fetchArgs += @('--depth', '1') }
+        & git @fetchArgs | Out-Null
+      }
+      else {
+        $fetchArgs = @('-C', $fullPath, 'fetch', '-q', 'origin', '--prune', '--no-tags')
+        if ($Shallow) { $fetchArgs += @('--depth', '1') }
+        & git @fetchArgs | Out-Null
+      }
       # Ignore fetch errors (mirrors previous behavior).
 
       $ref = $null
@@ -119,6 +134,16 @@ try {
 
       & git -C $fullPath reset -q --hard "origin/$ref" | Out-Null
       # Ignore reset errors (mirrors previous behavior).
+
+      if ($MaxThin) {
+        # Keep submodules as small as practical:
+        # - remove untracked files
+        # - expire reflogs so old commits become prunable
+        # - prune unreachable objects immediately
+        & git -C $fullPath clean -ffd -q | Out-Null
+        & git -C $fullPath reflog expire --expire=now --all | Out-Null
+        & git -C $fullPath gc --prune=now --quiet | Out-Null
+      }
 
       Write-Host "[ok] $subPath -> origin/$ref"
     }

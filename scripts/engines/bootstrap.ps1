@@ -3,7 +3,9 @@ param(
   [ValidateSet('gcsim','wfpsim','custom','wfpsim-custom','all')]
   [string]$Engine = 'all',
 
-  [string[]]$Targets = @('gcsim')
+  [string[]]$Targets = @('gcsim'),
+
+  [switch]$MaxThin
 )
 
 Set-StrictMode -Version Latest
@@ -69,7 +71,7 @@ $buildEngineClisScript = Join-Path $PSScriptRoot 'build-engine-clis.ps1'
 Push-Location $repoRoot
 try {
   Invoke-Step -Title 'Update submodules' -Action {
-    & $updateSubmodulesScript
+    & $updateSubmodulesScript -MaxThin:$MaxThin
   }
 
   Invoke-Step -Title 'Download engine Go modules' -Action {
