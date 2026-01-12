@@ -94,14 +94,13 @@ try {
         $fetchArgs = @(
           '-C', $fullPath,
           'fetch', '-q', 'origin', '--prune',
-          '--no-tags',
           "refs/heads/${want}:refs/remotes/origin/${want}"
         )
         if ($Shallow) { $fetchArgs += @('--depth', '1') }
         & git @fetchArgs | Out-Null
       }
       else {
-        $fetchArgs = @('-C', $fullPath, 'fetch', '-q', 'origin', '--prune', '--no-tags')
+        $fetchArgs = @('-C', $fullPath, 'fetch', '-q', 'origin', '--prune')
         if ($Shallow) { $fetchArgs += @('--depth', '1') }
         & git @fetchArgs | Out-Null
       }
@@ -127,9 +126,38 @@ try {
         continue
       }
 
-      & git -C $fullPath checkout -q -B $ref --track "origin/$ref" 2>$null
-      if ($LASTEXITCODE -ne 0) {
-        & git -C $fullPath checkout -q -B $ref | Out-Null
+      # Some git/Pwsh combinations can error out when `--track` can't be set up
+      # (e.g. "starting point 'origin/<ref>' is not a branch"). Tracking is not
+      # required for our workflow since we hard reset to origin/<ref> below.
+      $oldNativeEap = $null
+      $hasNativeEap = Get-Variable -Name 'PSNativeCommandUseErrorActionPreference' -Scope Global -ErrorAction SilentlyContinue
+      if ($hasNativeEap) {
+        $oldNativeEap = $global:PSNativeCommandUseErrorActionPreference
+        $global:PSNativeCommandUseErrorActionPreference = $false
+      }
+
+      try {
+        try {
+          & git -C $fullPath checkout -q -B $ref "origin/$ref" 2>$null | Out-Null
+        }
+        catch {
+          # Fall through to the next strategy.
+        }
+
+        if ($LASTEXITCODE -ne 0) {
+          try {
+            & git -C $fullPath checkout -q -B $ref | Out-Null
+          }
+          catch {
+            # If we can't even create/switch the branch, let it surface.
+            throw
+          }
+        }
+      }
+      finally {
+        if ($hasNativeEap) {
+          $global:PSNativeCommandUseErrorActionPreference = $oldNativeEap
+        }
       }
 
       & git -C $fullPath reset -q --hard "origin/$ref" | Out-Null
