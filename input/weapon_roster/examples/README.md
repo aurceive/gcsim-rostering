@@ -136,19 +136,25 @@
 - `name` (обязательно): имя варианта (должно быть уникальным)
 - `options` (опционально): map из `option -> value`, который будет преобразован в строку `key=value;key2=value2` и передан как `-options <строка>`
 
+Дополнительно поддерживается специальная настройка (не передаётся в `-options`):
+
+- `options.talent_level` (опционально): целое число 1..10. Если задано, то перед каждым запуском симуляции всем персонажам отряда выставляется `talent=<L>,<L>,<L>` независимо от того, что было указано в `config.txt`. Если не задано — таланты остаются как в исходном конфиге симуляции.
+
 Если секция отсутствует, используется один вариант `default` без передачи `-options` (поведение как раньше).
 
 Пример:
 
 ```yaml
 substat_optimizer_variants:
+  - name: kqms
   - name: default
-  - name: low_liquid
     options:
-      total_liquid_substats: 10
-      fixed_substats_count: 4
-      fine_tune: 0
-      show_substat_scalars: 0
+      talent_level: 9
+      total_liquid_substats: 20
+      indiv_liquid_cap: 10
+      fixed_substats_count: 2
+      fine_tune: 1
+      show_substat_scalars: 1
 ```
 
 ### Минимальный пример

@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +20,82 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+func parseVariantOptions(in map[string]any) (*int, map[string]any, error) {
+	if len(in) == 0 {
+		return nil, nil, nil
+	}
+
+	optMap := make(map[string]any, len(in))
+	var talentLevel *int
+	for k, v := range in {
+		key := strings.TrimSpace(k)
+		if key == "" {
+			// Let the downstream option string builder produce a clearer error.
+			optMap[k] = v
+			continue
+		}
+		if strings.EqualFold(key, "talent_level") {
+			lvl, ok, err := parseOptionalInt(v)
+			if err != nil {
+				return nil, nil, fmt.Errorf("options.talent_level: %w", err)
+			}
+			if ok {
+				if lvl < 1 || lvl > 10 {
+					return nil, nil, fmt.Errorf("options.talent_level must be in [1..10], got %d", lvl)
+				}
+				talentLevel = &lvl
+			}
+			continue
+		}
+		optMap[k] = v
+	}
+
+	if len(optMap) == 0 {
+		optMap = nil
+	}
+
+	return talentLevel, optMap, nil
+}
+
+func parseOptionalInt(v any) (value int, ok bool, err error) {
+	if v == nil {
+		return 0, false, fmt.Errorf("value is null")
+	}
+
+	switch t := v.(type) {
+	case int:
+		return t, true, nil
+	case int64:
+		if t > math.MaxInt || t < math.MinInt {
+			return 0, false, fmt.Errorf("value %d overflows int", t)
+		}
+		return int(t), true, nil
+	case float64:
+		if math.IsNaN(t) || math.IsInf(t, 0) {
+			return 0, false, fmt.Errorf("value is not a finite number")
+		}
+		if t != math.Trunc(t) {
+			return 0, false, fmt.Errorf("value must be an integer, got %v", t)
+		}
+		if t > float64(math.MaxInt) || t < float64(math.MinInt) {
+			return 0, false, fmt.Errorf("value %v overflows int", t)
+		}
+		return int(t), true, nil
+	case string:
+		s := strings.TrimSpace(t)
+		if s == "" {
+			return 0, false, fmt.Errorf("value is empty")
+		}
+		i, e := strconv.Atoi(s)
+		if e != nil {
+			return 0, false, fmt.Errorf("invalid integer %q", s)
+		}
+		return i, true, nil
+	default:
+		return 0, false, fmt.Errorf("unsupported type %T", v)
+	}
+}
 
 // Run executes the roster optimization flow and returns the desired process exit code.
 func Run() int {
@@ -84,6 +162,7 @@ func run(appRoot string, opts Options) error {
 	}
 	variantOrder := make([]string, 0, len(variants))
 	optionsByVariant := make(map[string]string, len(variants))
+	talentLevelByVariant := make(map[string]*int, len(variants))
 	for _, v := range variants {
 		name := strings.TrimSpace(v.Name)
 		if name == "" {
@@ -92,12 +171,17 @@ func run(appRoot string, opts Options) error {
 		if slices.Contains(variantOrder, name) {
 			return fmt.Errorf("substat_optimizer_variants: duplicate name %q", name)
 		}
-		optStr, err := sim.BuildSubstatOptionsString(v.Options)
+		talentLevel, optMap, err := parseVariantOptions(v.Options)
+		if err != nil {
+			return fmt.Errorf("substat_optimizer_variants[%s]: %w", name, err)
+		}
+		optStr, err := sim.BuildSubstatOptionsString(optMap)
 		if err != nil {
 			return fmt.Errorf("substat_optimizer_variants[%s]: %w", name, err)
 		}
 		variantOrder = append(variantOrder, name)
 		optionsByVariant[name] = optStr
+		talentLevelByVariant[name] = talentLevel
 	}
 
 	engineRoot, err := engine.ResolveRoot(appRoot, cfg)
@@ -197,6 +281,7 @@ func run(appRoot string, opts Options) error {
 		for _, ref := range weapons.RefinesForWeapon(wd, weaponSources[weapon]) {
 			for _, variantName := range variantOrder {
 				optStr := optionsByVariant[variantName]
+				talentLevel := talentLevelByVariant[variantName]
 				bestTeamDps := 0
 				bestCharDps := 0
 				bestEr := 0.0
@@ -206,6 +291,12 @@ func run(appRoot string, opts Options) error {
 					newConfig, err := config.EditConfig(configStr, char, weapon, ref, mainStats)
 					if err != nil {
 						return err
+					}
+					if talentLevel != nil {
+						newConfig, err = config.ApplyTalentLevelAllChars(newConfig, *talentLevel)
+						if err != nil {
+							return err
+						}
 					}
 
 					err = writeTempConfig(tempConfig, newConfig)
