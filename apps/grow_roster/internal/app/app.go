@@ -3,10 +3,12 @@ package app
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +20,82 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+func parseVariantOptions(in map[string]any) (*int, map[string]any, error) {
+	if len(in) == 0 {
+		return nil, nil, nil
+	}
+
+	optMap := make(map[string]any, len(in))
+	var talentLevel *int
+	for k, v := range in {
+		key := strings.TrimSpace(k)
+		if key == "" {
+			// Let the downstream option string builder produce a clearer error.
+			optMap[k] = v
+			continue
+		}
+		if strings.EqualFold(key, "talent_level") {
+			lvl, ok, err := parseOptionalInt(v)
+			if err != nil {
+				return nil, nil, fmt.Errorf("options.talent_level: %w", err)
+			}
+			if ok {
+				if lvl < 1 || lvl > 10 {
+					return nil, nil, fmt.Errorf("options.talent_level must be in [1..10], got %d", lvl)
+				}
+				talentLevel = &lvl
+			}
+			continue
+		}
+		optMap[k] = v
+	}
+
+	if len(optMap) == 0 {
+		optMap = nil
+	}
+
+	return talentLevel, optMap, nil
+}
+
+func parseOptionalInt(v any) (value int, ok bool, err error) {
+	if v == nil {
+		return 0, false, fmt.Errorf("value is null")
+	}
+
+	switch t := v.(type) {
+	case int:
+		return t, true, nil
+	case int64:
+		if t > math.MaxInt || t < math.MinInt {
+			return 0, false, fmt.Errorf("value %d overflows int", t)
+		}
+		return int(t), true, nil
+	case float64:
+		if math.IsNaN(t) || math.IsInf(t, 0) {
+			return 0, false, fmt.Errorf("value is not a finite number")
+		}
+		if t != math.Trunc(t) {
+			return 0, false, fmt.Errorf("value must be an integer, got %v", t)
+		}
+		if t > float64(math.MaxInt) || t < float64(math.MinInt) {
+			return 0, false, fmt.Errorf("value %v overflows int", t)
+		}
+		return int(t), true, nil
+	case string:
+		s := strings.TrimSpace(t)
+		if s == "" {
+			return 0, false, fmt.Errorf("value is empty")
+		}
+		i, e := strconv.Atoi(s)
+		if e != nil {
+			return 0, false, fmt.Errorf("invalid integer %q", s)
+		}
+		return i, true, nil
+	default:
+		return 0, false, fmt.Errorf("unsupported type %T", v)
+	}
+}
 
 // Run executes the growth flow and returns the desired process exit code.
 func Run() int {
@@ -148,12 +226,23 @@ func run(appRoot string, opts Options) error {
 
 	var simElapsed time.Duration
 
+	// Progress tracking
+	totalRuns := len(invOrder) * len(mainStatCombos)
+	completed := 0
+	progressStart := time.Now()
+
 	investmentOrder := make([]string, 0, len(invOrder))
 	results := make(map[string]map[string]domain.RunResult, len(invOrder))
+	talentLevelByInvestment := make(map[string]*int, len(invOrder))
 
 	for _, inv := range invOrder {
 		investmentOrder = append(investmentOrder, inv.Name)
-		optStr, err := sim.BuildSubstatOptionsString(inv.Options)
+		talentLevel, optMap, err := parseVariantOptions(inv.Options)
+		if err != nil {
+			return fmt.Errorf("investment_levels[%s]: %w", inv.Name, err)
+		}
+		talentLevelByInvestment[inv.Name] = talentLevel
+		optStr, err := sim.BuildSubstatOptionsString(optMap)
 		if err != nil {
 			return fmt.Errorf("investment_levels[%s]: %w", inv.Name, err)
 		}
@@ -168,6 +257,12 @@ func run(appRoot string, opts Options) error {
 					return err
 				}
 			}
+			if tl := talentLevelByInvestment[inv.Name]; tl != nil {
+				newConfig, err = config.ApplyTalentLevelAllChars(newConfig, *tl)
+				if err != nil {
+					return err
+				}
+			}
 			if err := writeTempConfig(tempConfig, newConfig); err != nil {
 				return err
 			}
@@ -178,6 +273,19 @@ func run(appRoot string, opts Options) error {
 				return err
 			}
 			simElapsed += time.Since(simStart)
+
+			// Progress: print percentage and ETA after each simulation.
+			if totalRuns > 0 {
+				completed++
+				percent := float64(completed) / float64(totalRuns) * 100.0
+				elapsed := time.Since(progressStart)
+				etaStr := "unknown"
+				if completed > 0 {
+					remaining := time.Duration(float64(elapsed) * float64(totalRuns-completed) / float64(completed))
+					etaStr = remaining.Round(time.Second).String()
+				}
+				fmt.Printf("Progress: %d/%d (%.1f%%), ETA %s\n", completed, totalRuns, percent, etaStr)
+			}
 
 			teamDps := int(*res.Statistics.DPS.Mean)
 			charDps := 0

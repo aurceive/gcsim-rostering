@@ -98,7 +98,7 @@ func (r CLIRunner) OptimizeAndRun(ctx context.Context, configPath string, substa
 		return nil, fmt.Errorf("engine result missing statistics.dps.mean (%q)", outPath)
 	}
 	if strings.TrimSpace(res.ConfigFile) == "" {
-		return nil, fmt.Errorf("engine result missing config_file (%q)")
+		return nil, fmt.Errorf("engine result missing config_file (%q)", outPath)
 	}
 	return &res, nil
 }

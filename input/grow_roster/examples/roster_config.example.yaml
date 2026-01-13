@@ -18,19 +18,24 @@ target:
 
 # levels of investment are represented as substat optimizer option presets.
 # options will be passed to engine CLI via -options "k=v;k2=v2".
+# special option (not passed to -options):
+# - options.talent_level (optional, 1..10): if set, applies talent=L,L,L to all team members.
 investment_levels:
   - name: kqms
     options:
+      talent_level: 9
       total_liquid_substats: 20
       indiv_liquid_cap: 10
       fixed_substats_count: 2
   - name: high
     options:
+      talent_level: 10
       total_liquid_substats: 30
       indiv_liquid_cap: 12
       fixed_substats_count: 1
   - name: hyper
     options:
+      talent_level: 10
       total_liquid_substats: 40
       indiv_liquid_cap: 15
       fixed_substats_count: 0
