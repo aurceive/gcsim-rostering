@@ -53,3 +53,24 @@
 
   - основной: `apps/enka_import/enka_import.exe`
   - на примерах: `apps/enka_import/enka_import.exe -useExamples`
+
+## Запуск server mode для движков
+
+### 1 Обновление и сборка движков для server mode (если требуется)
+
+- `scripts/engines/bootstrap.ps1`
+
+### 2 Запуск
+
+Скрипт соберёт `server.exe` в `engines/bins/<engine>/` и запустит его.
+
+- `scripts/engines/launch-server.ps1 -Engine gcsim`
+- `scripts/engines/launch-server.ps1 -Engine wfpsim`
+- `scripts/engines/launch-server.ps1 -Engine custom`
+- `scripts/engines/launch-server.ps1 -Engine wfpsim-custom`
+
+### 3 Подключение из браузера
+
+- Откройте UI (например <https://gcsim.app>)
+- Включите “server mode”
+- Укажите URL `http://127.0.0.1:54321`
