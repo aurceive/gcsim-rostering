@@ -18,6 +18,7 @@
 
 - weapon_roster: `scripts/weapon_roster/bootstrap.ps1`
 - grow_roster: `scripts/grow_roster/bootstrap.ps1`
+- enka_import: `scripts/enka_import/bootstrap.ps1`
 - wfpsim_discord_archiver: `scripts/wfpsim_discord_archiver/bootstrap.ps1`
 
 Скрипт приложения:
@@ -38,10 +39,17 @@
 
   - основной: `apps/weapon_roster/roster.exe`
   - на примерах: `apps/weapon_roster/roster.exe -useExamples`
+
 - grow_roster:
 
   - основной: `apps/grow_roster/grow_roster.exe`
   - на примерах: `apps/grow_roster/grow_roster.exe -useExamples`
+
 - wfpsim_discord_archiver:
 
   - основной: `apps/wfpsim_discord_archiver/wfpsim_discord_archiver.exe`
+
+- enka_import:
+
+  - основной: `apps/enka_import/enka_import.exe`
+  - на примерах: `apps/enka_import/enka_import.exe -useExamples`

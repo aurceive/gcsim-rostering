@@ -1,0 +1,23 @@
+# enka_import config
+
+# Имя движка из папки engines/
+# engine: gcsim
+# engine: wfpsim
+# engine: custom
+engine: wfpsim-custom
+
+# Можно указать явный путь до корня движка (перекрывает engine)
+# enginePath: "C:/path/to/engines/wfpsim-custom"
+
+# UID игрока (9 цифр)
+uid: 700833538
+
+# Дополнительно подтягивать builds профиля Enka (если доступны)
+includeBuilds: true
+
+# Куда складывать результат, если outPath не задан.
+# Итоговый путь будет: <outDir>/<YYYYMMDD>_enka_import_<engine>_<uid>.txt
+# outDir: output/enka_import
+
+# Можно задать полный путь и тогда outDir игнорируется.
+# outPath: output/enka_import/custom_name.txt

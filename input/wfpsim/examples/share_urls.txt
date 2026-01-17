@@ -1,7 +1,0 @@
-# Вставь сюда ссылки вида:
-# https://wfpsim.com/sh/<uuid>
-# Пустые строки и строки начинающиеся с # или // будут проигнорированы.
-
-https://wfpsim.com/sh/73c1ddaa-f829-40ff-9764-4e6b4274455a
-https://wfpsim.com/sh/fab1ccec-51c6-4f28-8718-c91b24ed86c2
-https://wfpsim.com/sh/90e6521f-2b69-4e7a-b457-22b6eba9184e
