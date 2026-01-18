@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/domain"
@@ -69,23 +71,70 @@ func bestAvailableBenchmarks(results []domain.Result, weaponData domain.WeaponDa
 	return bestAvailableTeamDps, bestAvailableCharDps
 }
 
-func ExportResultsXLSX(appRoot string, char string, rosterName string, target domain.Target, variantOrder []string, resultsByVariant map[string][]domain.Result, weaponData domain.WeaponData, weaponNames map[string]string, weaponSources map[string][]string) (string, error) {
+func ExportResultsXLSX(appRoot string, char string, rosterName string, target domain.Target, variantOrder []string, resultsByVariant map[string][]domain.Result, weaponData domain.WeaponData, weaponNames map[string]string, weaponSources map[string][]string, outputPath string) (string, error) {
 	if len(variantOrder) == 0 {
 		variantOrder = []string{"default"}
 	}
 	primary := variantOrder[0]
-	primaryResults := resultsByVariant[primary]
-	if len(primaryResults) > 1 {
-		// Keep old behavior: row ordering follows the chosen target.
-		SortResultsByTarget(primaryResults, target)
-		resultsByVariant[primary] = primaryResults
+
+	// Determine row order from the union of all variants.
+	keySet := make(map[resultKey]struct{})
+	for _, v := range variantOrder {
+		for _, r := range resultsByVariant[v] {
+			keySet[resultKey{Weapon: r.Weapon, Refine: r.Refine}] = struct{}{}
+		}
+	}
+	keys := make([]resultKey, 0, len(keySet))
+	for k := range keySet {
+		keys = append(keys, k)
 	}
 
-	// Determine row order from primary results.
-	keys := make([]resultKey, 0, len(primaryResults))
-	for _, r := range primaryResults {
-		keys = append(keys, resultKey{Weapon: r.Weapon, Refine: r.Refine})
+	// Sort rows primarily by selected target in the primary variant, then by weapon key/refine for stability.
+	primaryLookup := make(map[resultKey]domain.Result)
+	for _, r := range resultsByVariant[primary] {
+		primaryLookup[resultKey{Weapon: r.Weapon, Refine: r.Refine}] = r
 	}
+	slices.SortFunc(keys, func(a, b resultKey) int {
+		ra, oka := primaryLookup[a]
+		rb, okb := primaryLookup[b]
+		// Missing results sort last.
+		if !oka && okb {
+			return 1
+		}
+		if oka && !okb {
+			return -1
+		}
+		if oka && okb {
+			if target == domain.TargetTeamDps {
+				if ra.TeamDps != rb.TeamDps {
+					if ra.TeamDps > rb.TeamDps {
+						return -1
+					}
+					return 1
+				}
+			} else {
+				if ra.CharDps != rb.CharDps {
+					if ra.CharDps > rb.CharDps {
+						return -1
+					}
+					return 1
+				}
+			}
+		}
+		if a.Weapon != b.Weapon {
+			if a.Weapon < b.Weapon {
+				return -1
+			}
+			return 1
+		}
+		if a.Refine != b.Refine {
+			if a.Refine < b.Refine {
+				return -1
+			}
+			return 1
+		}
+		return 0
+	})
 
 	// Build lookups per variant.
 	lookup := make(map[string]map[resultKey]domain.Result, len(variantOrder))
@@ -128,7 +177,7 @@ func ExportResultsXLSX(appRoot string, char string, rosterName string, target do
 			f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+1)), "Team %")
 			f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+2)), "Char DPS")
 			f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+3)), "Char %")
-			f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+4)), "ER at 0s")
+			f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+4)), "ER%")
 			f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+5)), "Main Stats")
 		}
 
@@ -144,7 +193,7 @@ func ExportResultsXLSX(appRoot string, char string, rosterName string, target do
 			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+1)), "Team %")
 			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+2)), "Char DPS")
 			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+3)), "Char %")
-			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+4)), "ER at 0s")
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+4)), "ER%")
 			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+5)), "Main Stats")
 			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+6)), "Config")
 		}
@@ -271,14 +320,20 @@ func ExportResultsXLSX(appRoot string, char string, rosterName string, target do
 		f.SetActiveSheet(idx)
 	}
 
-	// Create dir if not exists
-	if err := os.MkdirAll(filepath.Join(appRoot, "output", "weapon_roster"), 0o755); err != nil {
-		return "", err
+	filename := strings.TrimSpace(outputPath)
+	if filename == "" {
+		// Default output: output/weapon_roster/<YYYYMMDD>_weapon_roster_<char>_<roster>.xlsx
+		if err := os.MkdirAll(filepath.Join(appRoot, "output", "weapon_roster"), 0o755); err != nil {
+			return "", err
+		}
+		timestamp := time.Now().Format("20060102")
+		filename = filepath.Join(appRoot, "output", "weapon_roster", fmt.Sprintf("%s_weapon_roster_%s_%s.xlsx", timestamp, char, rosterName))
+	} else {
+		// Ensure parent dir exists for explicit output path.
+		if err := os.MkdirAll(filepath.Dir(filename), 0o755); err != nil {
+			return "", err
+		}
 	}
-
-	// yearmonthday
-	timestamp := time.Now().Format("20060102")
-	filename := filepath.Join(appRoot, "output", "weapon_roster", fmt.Sprintf("%s_weapon_roster_%s_%s.xlsx", timestamp, char, rosterName))
 	if err := f.SaveAs(filename); err != nil {
 		return "", err
 	}

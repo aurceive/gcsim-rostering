@@ -76,6 +76,9 @@ func (r CLIRunner) OptimizeAndRun(ctx context.Context, configPath string, substa
 	err = cmd.Run()
 	elapsed := time.Since(start)
 	if err != nil {
+		if ctx != nil && ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		msg := fmt.Sprintf("engine CLI failed after %s: %v", elapsed.Round(time.Millisecond), err)
 		out := bytes.TrimSpace(append(stdout.Bytes(), stderr.Bytes()...))
 		if len(out) > 0 {

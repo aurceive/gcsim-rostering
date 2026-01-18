@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -130,6 +132,9 @@ func RunWithOptions(opts Options) int {
 func run(appRoot string, opts Options) error {
 	totalStart := time.Now()
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
 	// Read config.txt
 	configPath := filepath.Join(appRoot, "input", "weapon_roster", "config.txt")
 	if opts.UseExamples {
@@ -240,8 +245,82 @@ func run(appRoot string, opts Options) error {
 		return Exit(0)
 	}
 
-	// Prepare list of weapons we will run (sorted by rarity desc then key)
+	// Prepare list of weapons we will run.
+	// By default: all weapons matching class + rarity filter.
 	weaponsToRun := weapons.SortByRarityDescThenKey(weaponsToConsider, weaponData)
+	if len(cfg.Weapons) > 0 {
+		requested := make([]string, 0, len(cfg.Weapons))
+		seen := make(map[string]struct{}, len(cfg.Weapons))
+		for _, raw := range cfg.Weapons {
+			s := strings.TrimSpace(raw)
+			if s == "" {
+				continue
+			}
+			if _, ok := seen[s]; ok {
+				continue
+			}
+			seen[s] = struct{}{}
+			requested = append(requested, s)
+		}
+
+		// Build reverse map: exact Russian name -> weapon key.
+		nameToKey := make(map[string]string, len(weaponNames))
+		ambiguous := make(map[string]struct{})
+		for k, ruName := range weaponNames {
+			if ruName == "" {
+				continue
+			}
+			if existing, ok := nameToKey[ruName]; ok {
+				if existing != k {
+					ambiguous[ruName] = struct{}{}
+				}
+				continue
+			}
+			nameToKey[ruName] = k
+		}
+
+		resolved := make([]string, 0, len(requested))
+		seenKeys := make(map[string]struct{}, len(requested))
+		var unknown []string
+		var wrongClass []string
+		for _, token := range requested {
+			weaponKey := ""
+			if _, ok := weaponData.Data[token]; ok {
+				weaponKey = token
+			} else if _, ok := ambiguous[token]; ok {
+				return fmt.Errorf("weapons: ambiguous Russian name (matches multiple keys): %q", token)
+			} else if k, ok := nameToKey[token]; ok {
+				weaponKey = k
+			}
+
+			if weaponKey == "" {
+				unknown = append(unknown, token)
+				continue
+			}
+			wd, ok := weaponData.Data[weaponKey]
+			if !ok {
+				unknown = append(unknown, token)
+				continue
+			}
+			if wd.WeaponClass != weaponClass {
+				wrongClass = append(wrongClass, weaponKey)
+				continue
+			}
+			if _, ok := seenKeys[weaponKey]; ok {
+				continue
+			}
+			seenKeys[weaponKey] = struct{}{}
+			resolved = append(resolved, weaponKey)
+		}
+		if len(unknown) > 0 {
+			return fmt.Errorf("weapons: unknown weapon keys or Russian names (strict full match): %s", strings.Join(unknown, ", "))
+		}
+		if len(wrongClass) > 0 {
+			return fmt.Errorf("weapons: weapons not compatible with %s (class=%s): %s", char, weaponClass, strings.Join(wrongClass, ", "))
+		}
+		weaponsToRun = resolved
+		fmt.Printf("weapons: running %d selected weapons\n", len(weaponsToRun))
+	}
 
 	// Generate main stat combinations
 	mainStatCombos := config.BuildMainStatCombos(cfg)
@@ -272,14 +351,28 @@ func run(appRoot string, opts Options) error {
 	completed := 0
 	start := time.Now()
 
+	canceled := false
 	for _, weapon := range weaponsToRun {
+		if ctx.Err() != nil {
+			canceled = true
+			break
+		}
 		wd, ok := weaponData.Data[weapon]
 		if !ok {
 			return fmt.Errorf("weapon %s not found in weapon data", weapon)
 		}
+
+		// Collect results for this weapon locally; only commit them if the weapon completes fully.
+		weaponResultsByVariant := make(map[string][]domain.Result, len(variantOrder))
+		weaponCompleted := true
+
 		// iterate refines for this weapon
 		for _, ref := range weapons.RefinesForWeapon(wd, weaponSources[weapon]) {
 			for _, variantName := range variantOrder {
+				if ctx.Err() != nil {
+					weaponCompleted = false
+					break
+				}
 				optStr := optionsByVariant[variantName]
 				talentLevel := talentLevelByVariant[variantName]
 				bestTeamDps := 0
@@ -288,6 +381,10 @@ func run(appRoot string, opts Options) error {
 				bestMainStats := ""
 				bestConfig := ""
 				for _, mainStats := range mainStatCombos {
+					if ctx.Err() != nil {
+						weaponCompleted = false
+						break
+					}
 					newConfig, err := config.EditConfig(configStr, char, weapon, ref, mainStats)
 					if err != nil {
 						return err
@@ -305,12 +402,20 @@ func run(appRoot string, opts Options) error {
 					}
 
 					simStart := time.Now()
-					res, err := runner.OptimizeAndRun(context.Background(), tempConfig, optStr)
+					res, err := runner.OptimizeAndRun(ctx, tempConfig, optStr)
 					if err != nil {
+						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+							weaponCompleted = false
+							canceled = true
+							break
+						}
 						return err
 					}
 					simElapsed += time.Since(simStart)
 					teamDps := int(*res.Statistics.DPS.Mean)
+					if len(res.Statistics.CharacterDps) <= charIndex {
+						return fmt.Errorf("engine result missing statistics.character_dps[%d]", charIndex)
+					}
 					charDps := int(*res.Statistics.CharacterDps[charIndex].Mean)
 					if len(res.CharacterDetails) <= charIndex {
 						return fmt.Errorf("engine result missing character_details[%d]", charIndex)
@@ -345,18 +450,79 @@ func run(appRoot string, opts Options) error {
 						fmt.Printf("Progress: %d/%d (%.1f%%), ETA %s\n", completed, totalRuns, percent, etaStr)
 					}
 				}
-				// Save best result for this weapon+ref+variant
-				resultsByVariant[variantName] = append(resultsByVariant[variantName], domain.Result{Weapon: weapon, Refine: ref, TeamDps: bestTeamDps, CharDps: bestCharDps, Er: bestEr, MainStats: bestMainStats, Config: bestConfig})
+				if !weaponCompleted {
+					break
+				}
+				// Save best result for this weapon+ref+variant.
+				weaponResultsByVariant[variantName] = append(weaponResultsByVariant[variantName], domain.Result{Weapon: weapon, Refine: ref, TeamDps: bestTeamDps, CharDps: bestCharDps, Er: bestEr, MainStats: bestMainStats, Config: bestConfig})
 			}
+			if !weaponCompleted {
+				break
+			}
+		}
+		if !weaponCompleted {
+			break
+		}
+		// Commit only fully-computed weapons.
+		for _, variantName := range variantOrder {
+			resultsByVariant[variantName] = append(resultsByVariant[variantName], weaponResultsByVariant[variantName]...)
 		}
 	}
 
-	// Sort results by target (desc) using the primary variant (first in config).
-	primaryVariant := variantOrder[0]
-	output.SortResultsByTarget(resultsByVariant[primaryVariant], target)
+	if canceled {
+		fmt.Fprintln(os.Stderr, "Interrupted: exporting only fully computed weapons...")
+	}
 
-	// Always export to xlsx (no console result output)
-	xlsxPath, err := output.ExportResultsXLSX(appRoot, char, cfg.RosterName, target, variantOrder, resultsByVariant, weaponData, weaponNames, weaponSources)
+	resolvePath := func(p string) string {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			return ""
+		}
+		p = filepath.FromSlash(p)
+		if filepath.IsAbs(p) {
+			return p
+		}
+		return filepath.Join(appRoot, p)
+	}
+
+	rawOutput := strings.TrimSpace(cfg.OutputTablePath)
+	rawBase := strings.TrimSpace(cfg.BaseTablePath)
+
+	outputPath := resolvePath(rawOutput)
+	basePath := resolvePath(rawBase)
+
+	// If both paths are omitted:
+	// - try to find an existing result table (for today) and use it as the merge base
+	// - keep outputPath empty so the exporter decides the output file name at the end
+	if rawOutput == "" && rawBase == "" {
+		if existing, ok, err := findExistingResultTable(appRoot, char, cfg.RosterName); err != nil {
+			return err
+		} else if ok {
+			basePath = existing
+		}
+		outputPath = ""
+	}
+
+	// If output path is explicitly set and exists, and no explicit base is provided,
+	// merge into the existing output instead of overwriting it from scratch.
+	if rawOutput != "" && basePath == "" {
+		if _, err := os.Stat(outputPath); err == nil {
+			basePath = outputPath
+		}
+	}
+
+	finalVariantOrder := variantOrder
+	finalResultsByVariant := resultsByVariant
+	if basePath != "" {
+		baseVariantOrder, baseResults, err := output.ImportResultsXLSX(basePath, weaponData, weaponNames)
+		if err != nil {
+			return err
+		}
+		finalVariantOrder, finalResultsByVariant = output.MergeResults(baseVariantOrder, baseResults, variantOrder, resultsByVariant)
+	}
+
+	// Export to xlsx (no console result output)
+	xlsxPath, err := output.ExportResultsXLSX(appRoot, char, cfg.RosterName, target, finalVariantOrder, finalResultsByVariant, weaponData, weaponNames, weaponSources, outputPath)
 	if err != nil {
 		return err
 	}
