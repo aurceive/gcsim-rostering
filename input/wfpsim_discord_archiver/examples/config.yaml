@@ -1,6 +1,19 @@
 # Configuration example for wfpsim_discord_archiver application.
 # Place the actual config in input/wfpsim_discord_archiver/config.yaml (it won't be committed to git).
 
+# Optional: enable strict character alias resolution (used to correctly read constellations from config_file).
+# If either `engine` or `enginePath` is set, the app will:
+# - load aliases from <engineRoot>/pkg/shortcut/characters.go
+# - error out if aliases can't be loaded or if a character/cons can't be resolved
+#
+# Use one of:
+# engine: wfpsim
+# OR
+# enginePath: C:/absolute/path/to/engine/root
+#
+engine: wfpsim
+# enginePath: C:/Users/you/Git/gcsim-rostering/engines/wfpsim
+
 discord:
   token: DISCORD_TOKEN # DO NOT COMMIT ACTUAL TOKEN
   # For guildSearch mode, specify one or more servers (guilds).

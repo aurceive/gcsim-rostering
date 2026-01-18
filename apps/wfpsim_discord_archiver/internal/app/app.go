@@ -12,8 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/charalias"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/config"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/discord"
+	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/engine"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/localxlsx"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/sheetsapi"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/state"
@@ -71,6 +73,23 @@ func Run(ctx context.Context, cfg config.Config) error {
 
 	wc := wfpsim.New()
 
+	var aliasResolver *charalias.Resolver
+	if strings.TrimSpace(cfg.Engine) != "" || strings.TrimSpace(cfg.EnginePath) != "" {
+		repoRoot, err := engine.FindRepoRoot()
+		if err != nil {
+			return err
+		}
+		engineRoot, err := engine.ResolveRoot(repoRoot, cfg.Engine, cfg.EnginePath)
+		if err != nil {
+			return err
+		}
+		aliasResolver, err = charalias.LoadFromEngineRoot(engineRoot)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Character alias resolver enabled (engine root=%s)\n", engineRoot)
+	}
+
 	totalNewKeys := 0
 	cutoff := time.Now().Add(-time.Duration(cfg.Run.SinceDays) * 24 * time.Hour)
 	seenKeys := map[string]struct{}{}
@@ -124,7 +143,10 @@ func Run(ctx context.Context, cfg config.Config) error {
 						continue
 					}
 
-					row := buildRow(guildID, m, key, share)
+					row, err := buildRow(guildID, m, key, share, aliasResolver)
+					if err != nil {
+						return err
+					}
 					if err := writer.AppendRow(ctx, row, key, m.ID); err != nil {
 						return err
 					}
@@ -193,7 +215,10 @@ func Run(ctx context.Context, cfg config.Config) error {
 					continue
 				}
 
-				row := buildRow(guildID, m, key, share)
+				row, err := buildRow(guildID, m, key, share, aliasResolver)
+				if err != nil {
+					return err
+				}
 				if err := writer.AppendRow(ctx, row, key, m.ID); err != nil {
 					return err
 				}
@@ -293,7 +318,7 @@ func extractKeys(content string) []string {
 	return out
 }
 
-func buildRow(guildID string, m discord.Message, key string, share wfpsim.Share) []interface{} {
+func buildRow(guildID string, m discord.Message, key string, share wfpsim.Share, aliasResolver *charalias.Resolver) ([]interface{}, error) {
 	type pair struct {
 		char   string
 		weapon string
@@ -314,14 +339,28 @@ func buildRow(guildID string, m discord.Message, key string, share wfpsim.Share)
 
 	chars := make([]string, 0, len(pairs))
 	weps := make([]string, 0, len(pairs))
-	consByChar := parseConsByChar(share.ConfigFile)
+	consByChar, err := parseConsByChar(share.ConfigFile, aliasResolver)
+	if err != nil {
+		return nil, err
+	}
 	cons := make([]string, 0, len(pairs))
 	for _, p := range pairs {
 		chars = append(chars, p.char)
 		weps = append(weps, p.weapon)
-		if v, ok := consByChar[strings.ToLower(p.char)]; ok {
+		lookup := strings.ToLower(p.char)
+		if aliasResolver != nil {
+			canon, ok := aliasResolver.Canonicalize(lookup)
+			if !ok {
+				return nil, fmt.Errorf("unknown character key %q (engine root=%s)", lookup, aliasResolver.EngineRoot())
+			}
+			lookup = canon
+		}
+		if v, ok := consByChar[lookup]; ok {
 			cons = append(cons, fmt.Sprintf("C%d", v))
 		} else {
+			if aliasResolver != nil {
+				return nil, fmt.Errorf("missing cons for character %q (engine root=%s)", lookup, aliasResolver.EngineRoot())
+			}
 			cons = append(cons, "")
 		}
 	}
@@ -347,13 +386,13 @@ func buildRow(guildID string, m discord.Message, key string, share wfpsim.Share)
 		share.SchemaVersion.Major,
 		share.SchemaVersion.Minor,
 		strings.Join(cons, ","),
-	}
+	}, nil
 }
 
-func parseConsByChar(configFile string) map[string]int {
+func parseConsByChar(configFile string, aliasResolver *charalias.Resolver) (map[string]int, error) {
 	out := map[string]int{}
 	if strings.TrimSpace(configFile) == "" {
-		return out
+		return out, nil
 	}
 	matches := cfgConsRe.FindAllStringSubmatch(configFile, -1)
 	for _, m := range matches {
@@ -364,13 +403,20 @@ func parseConsByChar(configFile string) map[string]int {
 		if name == "" {
 			continue
 		}
+		if aliasResolver != nil {
+			canon, ok := aliasResolver.Canonicalize(name)
+			if !ok {
+				return nil, fmt.Errorf("unknown character alias %q in config (engine root=%s)", name, aliasResolver.EngineRoot())
+			}
+			name = canon
+		}
 		v, err := strconv.Atoi(strings.TrimSpace(m[2]))
 		if err != nil {
 			continue
 		}
 		out[name] = v
 	}
-	return out
+	return out, nil
 }
 
 type rowWriter interface {

@@ -12,6 +12,8 @@ import (
 )
 
 type Config struct {
+	Engine     string
+	EnginePath string
 	Discord    DiscordConfig
 	AppsScript AppsScriptConfig
 	Sheet      SheetConfig
@@ -44,6 +46,8 @@ type RunConfig struct {
 }
 
 type FileConfig struct {
+	Engine     string           `yaml:"engine"`
+	EnginePath string           `yaml:"enginePath"`
 	Discord    DiscordConfig    `yaml:"discord"`
 	AppsScript AppsScriptConfig `yaml:"appsScript"`
 	Sheet      SheetConfig      `yaml:"sheet"`
@@ -60,6 +64,8 @@ func Load(configPath string) (Config, error) {
 	}
 
 	// Start from file config
+	cfg.Engine = strings.TrimSpace(fileCfg.Engine)
+	cfg.EnginePath = strings.TrimSpace(fileCfg.EnginePath)
 	cfg.Discord = fileCfg.Discord
 	cfg.AppsScript = fileCfg.AppsScript
 	cfg.Sheet = fileCfg.Sheet

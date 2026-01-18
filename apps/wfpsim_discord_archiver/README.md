@@ -38,6 +38,7 @@
 Отредактируй `input/wfpsim_discord_archiver/config.yaml`:
 
 - Discord: `discord.token`, `discord.serverIds`, `discord.channelIds`
+- Опционально (алиасы персонажей для чтения конст): `engine` или `enginePath` (если задано — при ошибке резолва/парсинга алиасов или при невозможности определить консты приложение упадёт с ошибкой)
 - Apps Script: `appsScript.webAppUrl`, `appsScript.apiKey`
 - Google Sheet: `sheet.id`, `sheet.name`
 
