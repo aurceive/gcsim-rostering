@@ -37,7 +37,7 @@
 
 Отредактируй `input/wfpsim_discord_archiver/config.yaml`:
 
-- Discord: `discord.token`, `discord.serverId`, `discord.channelIds`
+- Discord: `discord.token`, `discord.serverIds`, `discord.channelIds`
 - Apps Script: `appsScript.webAppUrl`, `appsScript.apiKey`
 - Google Sheet: `sheet.id`, `sheet.name`
 

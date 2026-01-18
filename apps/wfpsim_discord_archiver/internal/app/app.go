@@ -42,11 +42,11 @@ func Run(ctx context.Context, cfg config.Config) error {
 	if cfg.Run.IgnoreStateCheckpoint {
 		fmt.Printf("ignoreStateCheckpoint=true: ignoring channel/search checkpoints (ProcessedKeys still used and saved)\n")
 		st.Channels = map[string]state.ChannelState{}
-		st.LastSearchID = ""
+		st.LastSearchIDs = map[string]string{}
 	}
 	st.LastRunStarted = time.Now()
 
-	dc, err := discord.New(cfg.Discord.Token, cfg.Discord.ServerID)
+	dc, err := discord.New(cfg.Discord.Token)
 	if err != nil {
 		return fmt.Errorf("discord client: %w", err)
 	}
@@ -74,60 +74,70 @@ func Run(ctx context.Context, cfg config.Config) error {
 	totalNewKeys := 0
 	cutoff := time.Now().Add(-time.Duration(cfg.Run.SinceDays) * 24 * time.Hour)
 	seenKeys := map[string]struct{}{}
+	channelGuildID := map[string]string{}
 
 	if cfg.Run.Mode == "guildSearch" {
 		fmt.Printf("Using run.mode=guildSearch\n")
-		msgStopAfter := ""
-		if !cfg.Run.IgnoreStateCheckpoint {
-			msgStopAfter = st.LastSearchID
+		guildIDs := cfg.Discord.ServerIDs
+		fmt.Printf("Guilds: %d\n", len(guildIDs))
+		if st.LastSearchIDs == nil {
+			st.LastSearchIDs = map[string]string{}
 		}
 
-		msgs, newestSeen, err := dc.SearchGuildMessages(ctx, "wfpsim.com/sh/", msgStopAfter, cutoff, cfg.Discord.ChannelIDs)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("Fetched %d messages from guild search\n", len(msgs))
-
-		for _, m := range msgs {
-			// We still iterate over everything search returned, but only *process* messages
-			// that fall within the cutoff window.
-			if !cutoff.IsZero() && (m.CreatedAt.IsZero() || m.CreatedAt.Before(cutoff)) {
-				continue
+		for gi, guildID := range guildIDs {
+			fmt.Printf("Processing guild %d/%d: %s\n", gi+1, len(guildIDs), guildID)
+			msgStopAfter := ""
+			if !cfg.Run.IgnoreStateCheckpoint {
+				msgStopAfter = st.LastSearchIDs[guildID]
 			}
 
-			keys := extractKeys(m.Content)
-			if len(keys) == 0 {
-				continue
+			msgs, newestSeen, err := dc.SearchGuildMessages(ctx, guildID, "wfpsim.com/sh/", msgStopAfter, cutoff, cfg.Discord.ChannelIDs)
+			if err != nil {
+				return err
 			}
-			for _, key := range keys {
-				if _, ok := seenKeys[key]; ok {
-					continue
-				}
-				seenKeys[key] = struct{}{}
-				if _, ok := st.ProcessedKeys[key]; ok {
+			fmt.Printf("Fetched %d messages from guild search (guild=%s)\n", len(msgs), guildID)
+
+			for _, m := range msgs {
+				// We still iterate over everything search returned, but only *process* messages
+				// that fall within the cutoff window.
+				if !cutoff.IsZero() && (m.CreatedAt.IsZero() || m.CreatedAt.Before(cutoff)) {
 					continue
 				}
 
-				fmt.Printf("Fetching share for key %s...\n", key)
-				share, err := wc.FetchShare(ctx, key)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "wfpsim fetch failed key=%s msg=%s err=%v\n", key, m.ID, err)
+				keys := extractKeys(m.Content)
+				if len(keys) == 0 {
 					continue
 				}
+				for _, key := range keys {
+					if _, ok := seenKeys[key]; ok {
+						continue
+					}
+					seenKeys[key] = struct{}{}
+					if _, ok := st.ProcessedKeys[key]; ok {
+						continue
+					}
 
-				row := buildRow(cfg.Discord.ServerID, m, key, share)
-				if err := writer.AppendRow(ctx, row, key, m.ID); err != nil {
-					return err
+					fmt.Printf("Fetching share for key %s...\n", key)
+					share, err := wc.FetchShare(ctx, key)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "wfpsim fetch failed key=%s msg=%s err=%v\n", key, m.ID, err)
+						continue
+					}
+
+					row := buildRow(guildID, m, key, share)
+					if err := writer.AppendRow(ctx, row, key, m.ID); err != nil {
+						return err
+					}
+
+					totalNewKeys++
+					st.ProcessedKeys[key] = time.Now()
 				}
-
-				totalNewKeys++
-				st.ProcessedKeys[key] = time.Now()
 			}
-		}
 
-		if !cfg.Run.IgnoreStateCheckpoint {
-			if newestSeen != "" {
-				st.LastSearchID = newestSeen
+			if !cfg.Run.IgnoreStateCheckpoint {
+				if newestSeen != "" {
+					st.LastSearchIDs[guildID] = newestSeen
+				}
 			}
 		}
 		goto finalize
@@ -135,6 +145,18 @@ func Run(ctx context.Context, cfg config.Config) error {
 
 	for i, chID := range cfg.Discord.ChannelIDs {
 		fmt.Printf("Processing channel %d/%d: %s\n", i+1, len(cfg.Discord.ChannelIDs), chID)
+		guildID := channelGuildID[chID]
+		if guildID == "" {
+			gid, err := dc.ChannelGuildID(chID)
+			if err != nil {
+				// Best-effort: keep running; URL/rows will use MessageURL fallback.
+				fmt.Fprintf(os.Stderr, "warn: failed to resolve guild id for channel=%s: %v\n", chID, err)
+				gid = ""
+			}
+			guildID = gid
+			channelGuildID[chID] = guildID
+		}
+
 		chState := st.Channels[chID]
 		stopAfter := chState.LastSeenMessageID
 		if cfg.Run.IgnoreStateCheckpoint {
@@ -171,7 +193,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 					continue
 				}
 
-				row := buildRow(cfg.Discord.ServerID, m, key, share)
+				row := buildRow(guildID, m, key, share)
 				if err := writer.AppendRow(ctx, row, key, m.ID); err != nil {
 					return err
 				}

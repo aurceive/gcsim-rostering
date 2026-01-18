@@ -11,7 +11,7 @@ import (
 type State struct {
 	Channels       map[string]ChannelState `json:"channels"`
 	ProcessedKeys  map[string]time.Time    `json:"processedKeys"`
-	LastSearchID   string                  `json:"lastSearchMessageId"`
+	LastSearchIDs  map[string]string       `json:"lastSearchMessageIds,omitempty"`
 	LastRunStarted time.Time               `json:"lastRunStarted"`
 	LastRunEnded   time.Time               `json:"lastRunEnded"`
 }
@@ -39,6 +39,9 @@ func Load(path string) (State, error) {
 	}
 	if st.ProcessedKeys == nil {
 		st.ProcessedKeys = map[string]time.Time{}
+	}
+	if st.LastSearchIDs == nil {
+		st.LastSearchIDs = map[string]string{}
 	}
 	return st, nil
 }

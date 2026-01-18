@@ -15,9 +15,12 @@ import (
 // Note: this endpoint may not be available for bots; expect HTTP 403 if Discord blocks it.
 //
 // Results are returned newest -> oldest; we then sort oldest -> newest to match FetchRecentMessages.
-func (c *Client) SearchGuildMessages(ctx context.Context, contentQuery string, minMessageID string, cutoffTime time.Time, channelIDs []string) ([]Message, string, error) {
+func (c *Client) SearchGuildMessages(ctx context.Context, guildID string, contentQuery string, minMessageID string, cutoffTime time.Time, channelIDs []string) ([]Message, string, error) {
 	if c == nil || c.s == nil {
 		return nil, "", fmt.Errorf("discord client is nil")
+	}
+	if guildID == "" {
+		return nil, "", fmt.Errorf("guildID is required")
 	}
 	if contentQuery == "" {
 		contentQuery = "wfpsim.com/sh/"
@@ -82,8 +85,8 @@ func (c *Client) SearchGuildMessages(ctx context.Context, contentQuery string, m
 			q.Add("channel_id", ch)
 		}
 
-		uri := discordgo.EndpointGuild(c.guildID) + "/messages/search?" + q.Encode()
-		body, err := c.s.RequestWithBucketID("GET", uri, nil, discordgo.EndpointGuild(c.guildID)+"/messages/search")
+		uri := discordgo.EndpointGuild(guildID) + "/messages/search?" + q.Encode()
+		body, err := c.s.RequestWithBucketID("GET", uri, nil, discordgo.EndpointGuild(guildID)+"/messages/search")
 		if err != nil {
 			return nil, newestSeen, fmt.Errorf("discord guild search: %w", err)
 		}

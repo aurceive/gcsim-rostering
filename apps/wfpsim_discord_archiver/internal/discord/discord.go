@@ -11,8 +11,7 @@ import (
 )
 
 type Client struct {
-	guildID string
-	s       *discordgo.Session
+	s *discordgo.Session
 }
 
 type Message struct {
@@ -23,13 +22,13 @@ type Message struct {
 	CreatedAt time.Time
 }
 
-func New(token, guildID string) (*Client, error) {
+func New(token string) (*Client, error) {
 	// token should already have the proper prefix (e.g. "Bot ")
 	s, err := discordgo.New(token)
 	if err != nil {
 		return nil, err
 	}
-	return &Client{guildID: guildID, s: s}, nil
+	return &Client{s: s}, nil
 }
 
 func (c *Client) Close() error {
@@ -206,7 +205,24 @@ func snowflakeFromTime(t time.Time) string {
 }
 
 func MessageURL(guildID, channelID, messageID string) string {
+	if guildID == "" {
+		guildID = "@me"
+	}
 	return fmt.Sprintf("https://discord.com/channels/%s/%s/%s", guildID, channelID, messageID)
+}
+
+func (c *Client) ChannelGuildID(channelID string) (string, error) {
+	if c == nil || c.s == nil {
+		return "", fmt.Errorf("discord client is nil")
+	}
+	ch, err := c.s.Channel(channelID)
+	if err != nil {
+		return "", err
+	}
+	if ch == nil {
+		return "", fmt.Errorf("discord channel not found: %s", channelID)
+	}
+	return ch.GuildID, nil
 }
 
 func authorName(u *discordgo.User) string {

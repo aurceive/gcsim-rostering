@@ -20,7 +20,7 @@ type Config struct {
 
 type DiscordConfig struct {
 	Token      string   `yaml:"token"`
-	ServerID   string   `yaml:"serverId"`
+	ServerIDs  []string `yaml:"serverIds"`
 	ChannelIDs []string `yaml:"channelIds"`
 }
 
@@ -38,7 +38,7 @@ type RunConfig struct {
 	StateFile string `yaml:"stateFile"`
 	SinceDays int    `yaml:"sinceDays"`
 	Mode      string `yaml:"mode"`
-	// If true, ignores state checkpoints (lastSearchMessageId for guildSearch and per-channel lastSeenMessageId for channelHistory).
+	// If true, ignores state checkpoints (lastSearchMessageIds for guildSearch and per-channel lastSeenMessageId for channelHistory).
 	IgnoreStateCheckpoint bool `yaml:"ignoreStateCheckpoint"`
 	DryRun                bool `yaml:"dryRun"`
 }
@@ -79,16 +79,18 @@ func Load(configPath string) (Config, error) {
 	if strings.TrimSpace(cfg.Discord.Token) == "" {
 		return Config{}, errors.New("missing discord.token")
 	}
-	if strings.TrimSpace(cfg.Discord.ServerID) == "" {
-		return Config{}, errors.New("missing discord.serverId")
-	}
+	cfg.Discord.ServerIDs = normalizeIDs(cfg.Discord.ServerIDs...)
 
 	switch cfg.Run.Mode {
 	case "channelHistory":
 		if len(cfg.Discord.ChannelIDs) == 0 {
 			return Config{}, errors.New("missing discord.channelIds")
 		}
+		// discord.serverIds is optional here because channelIds are globally unique.
 	case "guildSearch":
+		if len(cfg.Discord.ServerIDs) == 0 {
+			return Config{}, errors.New("missing discord.serverIds")
+		}
 		// channelIds optional (can be used to narrow search later)
 	default:
 		return Config{}, fmt.Errorf("invalid run.mode: %s (expected channelHistory|guildSearch)", cfg.Run.Mode)
@@ -112,6 +114,23 @@ func Load(configPath string) (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func normalizeIDs(ids ...string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(ids))
+	for _, raw := range ids {
+		id := strings.TrimSpace(raw)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }
 
 func loadFileConfig(path string) (FileConfig, error) {

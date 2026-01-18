@@ -3,7 +3,11 @@
 
 discord:
   token: DISCORD_TOKEN # DO NOT COMMIT ACTUAL TOKEN
-  serverId: 123456789012345678
+  # For guildSearch mode, specify one or more servers (guilds).
+  serverIds:
+    - 123456789012345678
+    - 987654321098765432
+  # Nessessary for channelHistory mode; optional for guildSearch mode.
   channelIds:
     - 111111111111111111
     - 222222222222222222
