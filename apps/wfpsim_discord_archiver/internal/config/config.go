@@ -73,7 +73,7 @@ func Load(configPath string) (Config, error) {
 
 	// Defaults
 	if strings.TrimSpace(cfg.Run.StateFile) == "" {
-		cfg.Run.StateFile = filepath.Clean("work/wfpsim_discord_archiver_state.json")
+		cfg.Run.StateFile = filepath.Clean("work/wfpsim_discord_archiver/state.json")
 	}
 	if cfg.Run.SinceDays == 0 {
 		cfg.Run.SinceDays = 30
