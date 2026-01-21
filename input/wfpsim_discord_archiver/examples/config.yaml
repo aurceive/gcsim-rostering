@@ -42,7 +42,7 @@ run:
   mode: channelHistory
   # mode: guildSearch
   sinceDays: 3
-  stateFile: work/wfpsim_discord_archiver_state.json
+  # stateFile: work/wfpsim_discord_archiver/state.json
   # Ignore channel/guild checkpoints (scan the whole sinceDays window),
   # but still use/save processedKeys to avoid refetching the same shares.
   ignoreStateCheckpoint: false

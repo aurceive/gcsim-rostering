@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -97,6 +98,99 @@ func parseOptionalInt(v any) (value int, ok bool, err error) {
 	default:
 		return 0, false, fmt.Errorf("unsupported type %T", v)
 	}
+}
+
+type weaponRequest struct {
+	name           string
+	includeDefault bool
+	refines        map[int]struct{}
+}
+
+type resultKey struct {
+	Weapon string
+	Refine int
+}
+
+func parseWeaponAndRefines(raw string) (name string, refines []int, hasRefines bool, err error) {
+	fields := strings.Fields(raw)
+	if len(fields) == 0 {
+		return "", nil, false, fmt.Errorf("empty weapon entry")
+	}
+
+	idx := len(fields) - 1
+	for idx >= 0 {
+		r, parseErr := strconv.Atoi(fields[idx])
+		if parseErr != nil {
+			break
+		}
+		if r < 1 || r > 5 {
+			return "", nil, false, fmt.Errorf("refine must be in [1..5], got %d in %q", r, raw)
+		}
+		refines = append(refines, r)
+		idx--
+	}
+	if idx < 0 {
+		return "", nil, false, fmt.Errorf("weapon name missing in %q", raw)
+	}
+	name = strings.Join(fields[:idx+1], " ")
+	for i, j := 0, len(refines)-1; i < j; i, j = i+1, j-1 {
+		refines[i], refines[j] = refines[j], refines[i]
+	}
+	return name, refines, len(refines) > 0, nil
+}
+
+func buildRefinesForWeapon(req *weaponRequest, wd domain.Weapon, sources []string) []int {
+	refSet := make(map[int]struct{})
+	if req == nil || req.includeDefault {
+		for _, r := range weapons.RefinesForWeapon(wd, sources) {
+			refSet[r] = struct{}{}
+		}
+	}
+	if req != nil {
+		for r := range req.refines {
+			refSet[r] = struct{}{}
+		}
+	}
+	if len(refSet) == 0 {
+		return nil
+	}
+	out := make([]int, 0, len(refSet))
+	for r := range refSet {
+		out = append(out, r)
+	}
+	sort.Ints(out)
+	return out
+}
+
+func buildBaseLookup(baseResults map[string][]domain.Result) map[string]map[resultKey]struct{} {
+	if baseResults == nil {
+		return nil
+	}
+	lookup := make(map[string]map[resultKey]struct{}, len(baseResults))
+	for v, arr := range baseResults {
+		m := make(map[resultKey]struct{}, len(arr))
+		for _, r := range arr {
+			m[resultKey{Weapon: r.Weapon, Refine: r.Refine}] = struct{}{}
+		}
+		lookup[v] = m
+	}
+	return lookup
+}
+
+func hasResultForAllVariants(key resultKey, variantOrder []string, baseLookup map[string]map[resultKey]struct{}) bool {
+	if baseLookup == nil {
+		return false
+	}
+	for _, v := range variantOrder {
+		m := baseLookup[v]
+		if m == nil {
+			return false
+		}
+		if _, ok := m[key]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // Run executes the roster optimization flow and returns the desired process exit code.
@@ -248,19 +342,32 @@ func run(appRoot string, opts Options) error {
 	// Prepare list of weapons we will run.
 	// By default: all weapons matching class + rarity filter.
 	weaponsToRun := weapons.SortByRarityDescThenKey(weaponsToConsider, weaponData)
+	weaponRequestsByKey := make(map[string]*weaponRequest)
 	if len(cfg.Weapons) > 0 {
-		requested := make([]string, 0, len(cfg.Weapons))
-		seen := make(map[string]struct{}, len(cfg.Weapons))
+		requestedOrder := make([]string, 0, len(cfg.Weapons))
+		requestedByName := make(map[string]*weaponRequest, len(cfg.Weapons))
 		for _, raw := range cfg.Weapons {
 			s := strings.TrimSpace(raw)
 			if s == "" {
 				continue
 			}
-			if _, ok := seen[s]; ok {
+			name, refines, hasRefines, err := parseWeaponAndRefines(s)
+			if err != nil {
+				return fmt.Errorf("weapons: %w", err)
+			}
+			req := requestedByName[name]
+			if req == nil {
+				req = &weaponRequest{name: name, refines: make(map[int]struct{})}
+				requestedByName[name] = req
+				requestedOrder = append(requestedOrder, name)
+			}
+			if !hasRefines {
+				req.includeDefault = true
 				continue
 			}
-			seen[s] = struct{}{}
-			requested = append(requested, s)
+			for _, r := range refines {
+				req.refines[r] = struct{}{}
+			}
 		}
 
 		// Build reverse map: exact Russian name -> weapon key.
@@ -279,11 +386,11 @@ func run(appRoot string, opts Options) error {
 			nameToKey[ruName] = k
 		}
 
-		resolved := make([]string, 0, len(requested))
-		seenKeys := make(map[string]struct{}, len(requested))
+		resolved := make([]string, 0, len(requestedOrder))
+		seenKeys := make(map[string]struct{}, len(requestedOrder))
 		var unknown []string
 		var wrongClass []string
-		for _, token := range requested {
+		for _, token := range requestedOrder {
 			weaponKey := ""
 			if _, ok := weaponData.Data[token]; ok {
 				weaponKey = token
@@ -305,6 +412,23 @@ func run(appRoot string, opts Options) error {
 			if wd.WeaponClass != weaponClass {
 				wrongClass = append(wrongClass, weaponKey)
 				continue
+			}
+
+			req := requestedByName[token]
+			if req == nil {
+				return fmt.Errorf("weapons: internal error, missing request for %q", token)
+			}
+			if existing, ok := weaponRequestsByKey[weaponKey]; ok {
+				existing.includeDefault = existing.includeDefault || req.includeDefault
+				for r := range req.refines {
+					existing.refines[r] = struct{}{}
+				}
+			} else {
+				weaponRequestsByKey[weaponKey] = &weaponRequest{
+					name:           weaponKey,
+					includeDefault: req.includeDefault,
+					refines:        req.refines,
+				}
 			}
 			if _, ok := seenKeys[weaponKey]; ok {
 				continue
@@ -330,6 +454,54 @@ func run(appRoot string, opts Options) error {
 		return err
 	}
 
+	resolvePath := func(p string) string {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			return ""
+		}
+		p = filepath.FromSlash(p)
+		if filepath.IsAbs(p) {
+			return p
+		}
+		return filepath.Join(appRoot, p)
+	}
+
+	rawOutput := strings.TrimSpace(cfg.OutputTablePath)
+	rawBase := strings.TrimSpace(cfg.BaseTablePath)
+
+	outputPath := resolvePath(rawOutput)
+	basePath := resolvePath(rawBase)
+
+	// If both paths are omitted:
+	// - try to find an existing result table (for today) and use it as the merge base
+	// - keep outputPath empty so the exporter decides the output file name at the end
+	if rawOutput == "" && rawBase == "" {
+		if existing, ok, err := findExistingResultTable(appRoot, char, cfg.RosterName); err != nil {
+			return err
+		} else if ok {
+			basePath = existing
+		}
+		outputPath = ""
+	}
+
+	// If output path is explicitly set and exists, and no explicit base is provided,
+	// merge into the existing output instead of overwriting it from scratch.
+	if rawOutput != "" && basePath == "" {
+		if _, err := os.Stat(outputPath); err == nil {
+			basePath = outputPath
+		}
+	}
+
+	var baseVariantOrder []string
+	var baseResults map[string][]domain.Result
+	if basePath != "" {
+		baseVariantOrder, baseResults, err = output.ImportResultsXLSX(basePath, weaponData, weaponNames)
+		if err != nil {
+			return err
+		}
+	}
+	baseLookup := buildBaseLookup(baseResults)
+
 	workDir, err := ensureWorkDir(appRoot)
 	if err != nil {
 		return err
@@ -342,23 +514,79 @@ func run(appRoot string, opts Options) error {
 	resultsByVariant := make(map[string][]domain.Result, len(variantOrder))
 	var simElapsed time.Duration
 
+	// Prepare plan (per weapon refines), optionally prioritizing missing results.
+	type weaponPlan struct {
+		key     string
+		refines []int
+		missing bool
+	}
+	plans := make([]weaponPlan, 0, len(weaponsToRun))
+	for _, weapon := range weaponsToRun {
+		wd, ok := weaponData.Data[weapon]
+		if !ok {
+			return fmt.Errorf("weapon %s not found in weapon data", weapon)
+		}
+		refines := buildRefinesForWeapon(weaponRequestsByKey[weapon], wd, weaponSources[weapon])
+		if len(refines) == 0 {
+			continue
+		}
+		missingRefines := make([]int, 0, len(refines))
+		existingRefines := make([]int, 0, len(refines))
+		for _, ref := range refines {
+			key := resultKey{Weapon: weapon, Refine: ref}
+			if hasResultForAllVariants(key, variantOrder, baseLookup) {
+				existingRefines = append(existingRefines, ref)
+			} else {
+				missingRefines = append(missingRefines, ref)
+			}
+		}
+		missing := len(missingRefines) > 0
+		if baseLookup != nil {
+			if cfg.SkipExistingResults {
+				refines = missingRefines
+			} else {
+				refines = append(missingRefines, existingRefines...)
+			}
+		}
+		if len(refines) == 0 {
+			continue
+		}
+		plans = append(plans, weaponPlan{key: weapon, refines: refines, missing: missing})
+	}
+	if baseLookup != nil {
+		missingPlans := make([]weaponPlan, 0, len(plans))
+		completePlans := make([]weaponPlan, 0, len(plans))
+		for _, p := range plans {
+			if p.missing {
+				missingPlans = append(missingPlans, p)
+			} else {
+				completePlans = append(completePlans, p)
+			}
+		}
+		plans = append(missingPlans, completePlans...)
+	}
+
 	// Prepare progress tracking
-	// totalRuns = sum over weapons of (#refines * #mainStatCombos)
-	totalRuns, ok := weapons.ComputeTotalRuns(weaponsToRun, weaponData, weaponSources, mainStatCombos, len(variantOrder))
-	if !ok {
-		return fmt.Errorf("failed to compute total runs: weapon not found in weapon data")
+	// totalRuns = sum over weapons of (#refines * #mainStatCombos * #variants)
+	variantCount := len(variantOrder)
+	if variantCount == 0 {
+		variantCount = 1
+	}
+	totalRuns := 0
+	for _, p := range plans {
+		totalRuns += len(p.refines) * len(mainStatCombos) * variantCount
 	}
 	completed := 0
 	start := time.Now()
 
 	canceled := false
-	for _, weapon := range weaponsToRun {
+	for _, plan := range plans {
+		weapon := plan.key
 		if ctx.Err() != nil {
 			canceled = true
 			break
 		}
-		wd, ok := weaponData.Data[weapon]
-		if !ok {
+		if _, ok := weaponData.Data[weapon]; !ok {
 			return fmt.Errorf("weapon %s not found in weapon data", weapon)
 		}
 
@@ -367,7 +595,7 @@ func run(appRoot string, opts Options) error {
 		weaponCompleted := true
 
 		// iterate refines for this weapon
-		for _, ref := range weapons.RefinesForWeapon(wd, weaponSources[weapon]) {
+		for _, ref := range plan.refines {
 			for _, variantName := range variantOrder {
 				if ctx.Err() != nil {
 					weaponCompleted = false
@@ -473,51 +701,9 @@ func run(appRoot string, opts Options) error {
 		fmt.Fprintln(os.Stderr, "Interrupted: exporting only fully computed weapons...")
 	}
 
-	resolvePath := func(p string) string {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			return ""
-		}
-		p = filepath.FromSlash(p)
-		if filepath.IsAbs(p) {
-			return p
-		}
-		return filepath.Join(appRoot, p)
-	}
-
-	rawOutput := strings.TrimSpace(cfg.OutputTablePath)
-	rawBase := strings.TrimSpace(cfg.BaseTablePath)
-
-	outputPath := resolvePath(rawOutput)
-	basePath := resolvePath(rawBase)
-
-	// If both paths are omitted:
-	// - try to find an existing result table (for today) and use it as the merge base
-	// - keep outputPath empty so the exporter decides the output file name at the end
-	if rawOutput == "" && rawBase == "" {
-		if existing, ok, err := findExistingResultTable(appRoot, char, cfg.RosterName); err != nil {
-			return err
-		} else if ok {
-			basePath = existing
-		}
-		outputPath = ""
-	}
-
-	// If output path is explicitly set and exists, and no explicit base is provided,
-	// merge into the existing output instead of overwriting it from scratch.
-	if rawOutput != "" && basePath == "" {
-		if _, err := os.Stat(outputPath); err == nil {
-			basePath = outputPath
-		}
-	}
-
 	finalVariantOrder := variantOrder
 	finalResultsByVariant := resultsByVariant
 	if basePath != "" {
-		baseVariantOrder, baseResults, err := output.ImportResultsXLSX(basePath, weaponData, weaponNames)
-		if err != nil {
-			return err
-		}
 		finalVariantOrder, finalResultsByVariant = output.MergeResults(baseVariantOrder, baseResults, variantOrder, resultsByVariant)
 	}
 
