@@ -17,12 +17,11 @@ import (
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/discord"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/engine"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/localxlsx"
+	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/shareurl"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/sheetsapi"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/state"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/wfpsim"
 )
-
-var shareURLRe = regexp.MustCompile(`https?://wfpsim\.com/sh/(?P<key>[0-9a-fA-F-]{36})`)
 
 // Example line in config_file:
 //
@@ -296,26 +295,7 @@ func pruneProcessedKeys(st *state.State, maxAge time.Duration) {
 }
 
 func extractKeys(content string) []string {
-	matches := shareURLRe.FindAllStringSubmatch(content, -1)
-	if len(matches) == 0 {
-		return nil
-	}
-
-	idx := shareURLRe.SubexpIndex("key")
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(matches))
-	for _, m := range matches {
-		if idx <= 0 || idx >= len(m) {
-			continue
-		}
-		k := strings.ToLower(m[idx])
-		if _, ok := seen[k]; ok {
-			continue
-		}
-		seen[k] = struct{}{}
-		out = append(out, k)
-	}
-	return out
+	return shareurl.ExtractKeysFromText(content)
 }
 
 func buildRow(guildID string, m discord.Message, key string, share wfpsim.Share, aliasResolver *charalias.Resolver) ([]interface{}, error) {

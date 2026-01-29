@@ -5,4 +5,5 @@
 !/input/*/examples/
 !/input/*/examples/**
 *.exe
+/*.txt
 /TODO
