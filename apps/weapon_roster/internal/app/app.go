@@ -468,6 +468,9 @@ func run(appRoot string, opts Options) error {
 
 	rawOutput := strings.TrimSpace(cfg.OutputTablePath)
 	rawBase := strings.TrimSpace(cfg.BaseTablePath)
+	if cfg.IgnoreExistingResults && rawBase != "" {
+		return fmt.Errorf("ignore_existing_results is incompatible with base_table_path")
+	}
 
 	outputPath := resolvePath(rawOutput)
 	basePath := resolvePath(rawBase)
@@ -475,7 +478,7 @@ func run(appRoot string, opts Options) error {
 	// If both paths are omitted:
 	// - try to find an existing result table (for today) and use it as the merge base
 	// - keep outputPath empty so the exporter decides the output file name at the end
-	if rawOutput == "" && rawBase == "" {
+	if rawOutput == "" && rawBase == "" && !cfg.IgnoreExistingResults {
 		if existing, ok, err := findExistingResultTable(appRoot, char, cfg.RosterName); err != nil {
 			return err
 		} else if ok {
@@ -486,7 +489,7 @@ func run(appRoot string, opts Options) error {
 
 	// If output path is explicitly set and exists, and no explicit base is provided,
 	// merge into the existing output instead of overwriting it from scratch.
-	if rawOutput != "" && basePath == "" {
+	if rawOutput != "" && basePath == "" && !cfg.IgnoreExistingResults {
 		if _, err := os.Stat(outputPath); err == nil {
 			basePath = outputPath
 		}
@@ -704,7 +707,7 @@ func run(appRoot string, opts Options) error {
 	finalVariantOrder := variantOrder
 	finalResultsByVariant := resultsByVariant
 	if basePath != "" {
-		finalVariantOrder, finalResultsByVariant = output.MergeResults(baseVariantOrder, baseResults, variantOrder, resultsByVariant)
+		finalVariantOrder, finalResultsByVariant = output.MergeResults(baseVariantOrder, baseResults, variantOrder, resultsByVariant, target, cfg.TrustExistingResults)
 	}
 
 	// Export to xlsx (no console result output)

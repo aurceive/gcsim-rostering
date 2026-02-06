@@ -30,6 +30,13 @@ roster_name: перегрузки
 # Удобно для продолжения прерванного расчёта.
 # skip_existing_results: true
 
+# Доверять имеющимся результатам при merge (новые вычисления заменяют только если лучше по target).
+# trust_existing_results: true
+
+# Полностью игнорировать найденные ранее результаты (автопоиск, существующий output_table_path).
+# Несовместимо с base_table_path.
+# ignore_existing_results: true
+
 minimum_weapon_rarity: 5
 target:
   - personal_dps

@@ -24,6 +24,11 @@ type Config struct {
 	// OutputTablePath optionally sets the output XLSX path.
 	// If the file already exists, weapon_roster will merge/update rows instead of starting from scratch.
 	OutputTablePath string `yaml:"output_table_path"`
+	// TrustExistingResults keeps existing base/output results unless a new result is better (per weapon+refine).
+	TrustExistingResults bool `yaml:"trust_existing_results"`
+	// IgnoreExistingResults disables any auto-merge with existing result tables.
+	// Incompatible with BaseTablePath.
+	IgnoreExistingResults bool `yaml:"ignore_existing_results"`
 	// SkipExistingResults skips recomputation for weapon+refine pairs already present in base/output table.
 	SkipExistingResults      bool                      `yaml:"skip_existing_results"`
 	Target                   []string                  `yaml:"target"`
@@ -51,6 +56,8 @@ func (c *Config) UnmarshalYAML(value *yaml.Node) error {
 			"weapons":                    {},
 			"base_table_path":            {},
 			"output_table_path":          {},
+			"trust_existing_results":     {},
+			"ignore_existing_results":    {},
 			"skip_existing_results":      {},
 			"target":                     {},
 			"minimum_weapon_rarity":      {},
