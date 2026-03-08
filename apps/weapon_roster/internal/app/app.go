@@ -177,20 +177,50 @@ func buildBaseLookup(baseResults map[string][]domain.Result) map[string]map[resu
 	return lookup
 }
 
-func hasResultForAllVariants(key resultKey, variantOrder []string, baseLookup map[string]map[resultKey]struct{}) bool {
+func hasResultForVariant(key resultKey, variant string, baseLookup map[string]map[resultKey]struct{}) bool {
 	if baseLookup == nil {
 		return false
 	}
-	for _, v := range variantOrder {
-		m := baseLookup[v]
-		if m == nil {
-			return false
-		}
-		if _, ok := m[key]; !ok {
-			return false
+	m := baseLookup[variant]
+	if m == nil {
+		return false
+	}
+	_, ok := m[key]
+	return ok
+}
+
+func selectVariantsForRun(key resultKey, variantOrder []string, baseLookup map[string]map[resultKey]struct{}, skipExisting bool) ([]string, bool) {
+	missingVariants := make([]string, 0, len(variantOrder))
+	existingVariants := make([]string, 0, len(variantOrder))
+	for _, variantName := range variantOrder {
+		if hasResultForVariant(key, variantName, baseLookup) {
+			existingVariants = append(existingVariants, variantName)
+		} else {
+			missingVariants = append(missingVariants, variantName)
 		}
 	}
-	return true
+	if baseLookup == nil {
+		return append([]string(nil), variantOrder...), len(missingVariants) > 0
+	}
+	if skipExisting {
+		return missingVariants, len(missingVariants) > 0
+	}
+	planned := make([]string, 0, len(variantOrder))
+	planned = append(planned, missingVariants...)
+	planned = append(planned, existingVariants...)
+	return planned, len(missingVariants) > 0
+}
+
+func appendCompletedVariantResult(resultsByVariant map[string][]domain.Result, variantName string, result domain.Result) {
+	resultsByVariant[variantName] = append(resultsByVariant[variantName], result)
+}
+
+func formatProgressLine(completed int, totalRuns int, unitCompleted int, unitTotal int, eta string) string {
+	percent := 0.0
+	if totalRuns > 0 {
+		percent = float64(completed) / float64(totalRuns) * 100.0
+	}
+	return fmt.Sprintf("Progress: %d/%d (%.1f%%), unit %d/%d, ETA %s", completed, totalRuns, percent, unitCompleted, unitTotal, eta)
 }
 
 // Run executes the roster optimization flow and returns the desired process exit code.
@@ -517,11 +547,12 @@ func run(appRoot string, opts Options) error {
 	resultsByVariant := make(map[string][]domain.Result, len(variantOrder))
 	var simElapsed time.Duration
 
-	// Prepare plan (per weapon refines), optionally prioritizing missing results.
+	// Prepare plan (per weapon refine + optimizer variant), optionally prioritizing missing results.
 	type weaponPlan struct {
-		key     string
-		refines []int
-		missing bool
+		key              string
+		refines          []int
+		variantsByRefine map[int][]string
+		missing          bool
 	}
 	plans := make([]weaponPlan, 0, len(weaponsToRun))
 	for _, weapon := range weaponsToRun {
@@ -533,28 +564,25 @@ func run(appRoot string, opts Options) error {
 		if len(refines) == 0 {
 			continue
 		}
-		missingRefines := make([]int, 0, len(refines))
-		existingRefines := make([]int, 0, len(refines))
+		plannedRefines := make([]int, 0, len(refines))
+		variantsByRefine := make(map[int][]string, len(refines))
+		missing := false
 		for _, ref := range refines {
 			key := resultKey{Weapon: weapon, Refine: ref}
-			if hasResultForAllVariants(key, variantOrder, baseLookup) {
-				existingRefines = append(existingRefines, ref)
-			} else {
-				missingRefines = append(missingRefines, ref)
+			plannedVariants, refineMissing := selectVariantsForRun(key, variantOrder, baseLookup, cfg.SkipExistingResults)
+			if len(plannedVariants) == 0 {
+				continue
 			}
-		}
-		missing := len(missingRefines) > 0
-		if baseLookup != nil {
-			if cfg.SkipExistingResults {
-				refines = missingRefines
-			} else {
-				refines = append(missingRefines, existingRefines...)
+			if refineMissing {
+				missing = true
 			}
+			plannedRefines = append(plannedRefines, ref)
+			variantsByRefine[ref] = plannedVariants
 		}
-		if len(refines) == 0 {
+		if len(plannedRefines) == 0 {
 			continue
 		}
-		plans = append(plans, weaponPlan{key: weapon, refines: refines, missing: missing})
+		plans = append(plans, weaponPlan{key: weapon, refines: plannedRefines, variantsByRefine: variantsByRefine, missing: missing})
 	}
 	if baseLookup != nil {
 		missingPlans := make([]weaponPlan, 0, len(plans))
@@ -570,14 +598,17 @@ func run(appRoot string, opts Options) error {
 	}
 
 	// Prepare progress tracking
-	// totalRuns = sum over weapons of (#refines * #mainStatCombos * #variants)
-	variantCount := len(variantOrder)
-	if variantCount == 0 {
-		variantCount = 1
-	}
+	// totalRuns = sum over weapon+refine pairs of (#planned variants * #mainStatCombos)
+	totalEntries := 0
 	totalRuns := 0
 	for _, p := range plans {
-		totalRuns += len(p.refines) * len(mainStatCombos) * variantCount
+		for _, ref := range p.refines {
+			totalEntries += len(p.variantsByRefine[ref])
+			totalRuns += len(p.variantsByRefine[ref]) * len(mainStatCombos)
+		}
+	}
+	if totalEntries > 0 {
+		fmt.Printf("Planned entries: %d weapon+refine+variant, simulations: %d\n", totalEntries, totalRuns)
 	}
 	completed := 0
 	start := time.Now()
@@ -593,13 +624,13 @@ func run(appRoot string, opts Options) error {
 			return fmt.Errorf("weapon %s not found in weapon data", weapon)
 		}
 
-		// Collect results for this weapon locally; only commit them if the weapon completes fully.
-		weaponResultsByVariant := make(map[string][]domain.Result, len(variantOrder))
+		// Commit each fully-computed weapon+refine+variant immediately.
+		// If interruption happens mid-weapon, completed variants are still preserved.
 		weaponCompleted := true
 
 		// iterate refines for this weapon
 		for _, ref := range plan.refines {
-			for _, variantName := range variantOrder {
+			for _, variantName := range plan.variantsByRefine[ref] {
 				if ctx.Err() != nil {
 					weaponCompleted = false
 					break
@@ -611,7 +642,7 @@ func run(appRoot string, opts Options) error {
 				bestEr := 0.0
 				bestMainStats := ""
 				bestConfig := ""
-				for _, mainStats := range mainStatCombos {
+				for mainStatIdx, mainStats := range mainStatCombos {
 					if ctx.Err() != nil {
 						weaponCompleted = false
 						break
@@ -668,7 +699,6 @@ func run(appRoot string, opts Options) error {
 					// Progress: вывести процент завершения и ETA после каждой симуляции
 					if totalRuns > 0 {
 						completed++
-						percent := float64(completed) / float64(totalRuns) * 100.0
 						// estimate remaining time
 						elapsed := time.Since(start)
 						var etaStr string
@@ -678,14 +708,14 @@ func run(appRoot string, opts Options) error {
 						} else {
 							etaStr = "unknown"
 						}
-						fmt.Printf("Progress: %d/%d (%.1f%%), ETA %s\n", completed, totalRuns, percent, etaStr)
+						fmt.Println(formatProgressLine(completed, totalRuns, mainStatIdx+1, len(mainStatCombos), etaStr))
 					}
 				}
 				if !weaponCompleted {
 					break
 				}
 				// Save best result for this weapon+ref+variant.
-				weaponResultsByVariant[variantName] = append(weaponResultsByVariant[variantName], domain.Result{Weapon: weapon, Refine: ref, TeamDps: bestTeamDps, CharDps: bestCharDps, Er: bestEr, MainStats: bestMainStats, Config: bestConfig})
+				appendCompletedVariantResult(resultsByVariant, variantName, domain.Result{Weapon: weapon, Refine: ref, TeamDps: bestTeamDps, CharDps: bestCharDps, Er: bestEr, MainStats: bestMainStats, Config: bestConfig})
 			}
 			if !weaponCompleted {
 				break
@@ -694,14 +724,10 @@ func run(appRoot string, opts Options) error {
 		if !weaponCompleted {
 			break
 		}
-		// Commit only fully-computed weapons.
-		for _, variantName := range variantOrder {
-			resultsByVariant[variantName] = append(resultsByVariant[variantName], weaponResultsByVariant[variantName]...)
-		}
 	}
 
 	if canceled {
-		fmt.Fprintln(os.Stderr, "Interrupted: exporting only fully computed weapons...")
+		fmt.Fprintln(os.Stderr, "Interrupted: exporting fully computed weapon+refine+variant entries...")
 	}
 
 	finalVariantOrder := variantOrder

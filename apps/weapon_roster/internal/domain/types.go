@@ -29,7 +29,7 @@ type Config struct {
 	// IgnoreExistingResults disables any auto-merge with existing result tables.
 	// Incompatible with BaseTablePath.
 	IgnoreExistingResults bool `yaml:"ignore_existing_results"`
-	// SkipExistingResults skips recomputation for weapon+refine pairs already present in base/output table.
+	// SkipExistingResults skips recomputation for weapon+refine+optimizer-variant entries already present in base/output table.
 	SkipExistingResults      bool                      `yaml:"skip_existing_results"`
 	Target                   []string                  `yaml:"target"`
 	MinimumWeaponRarity      int                       `yaml:"minimum_weapon_rarity"`
