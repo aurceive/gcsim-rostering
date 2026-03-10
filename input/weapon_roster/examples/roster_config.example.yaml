@@ -1,7 +1,7 @@
-# engine: gcsim
-engine: wfpsim
-# engine: wfpsim-custom
+engine: gcsim
 # engine: custom
+# engine: wfpsim
+# engine: wfpsim-custom
 
 char: fischl
 roster_name: перегрузки
@@ -15,8 +15,8 @@ roster_name: перегрузки
 #   - skywardharp 2 3
 #   - skywardharp
 # Если пробуждения не указаны — берутся стандартные для этого оружия.
-# weapons:
-#   - skywardharp
+weapons:
+  - skywardharp
 #   - Небесное крыло
 
 # Можно начать с уже существующей таблицы (XLSX) и дополнить/обновить её результатами.

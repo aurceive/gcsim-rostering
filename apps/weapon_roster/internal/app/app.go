@@ -737,7 +737,7 @@ func run(appRoot string, opts Options) error {
 	}
 
 	// Export to xlsx (no console result output)
-	xlsxPath, err := output.ExportResultsXLSX(appRoot, char, cfg.RosterName, target, finalVariantOrder, finalResultsByVariant, weaponData, weaponNames, weaponSources, outputPath)
+	xlsxPath, err := output.ExportResultsXLSX(appRoot, char, charOrder, cfg.RosterName, target, finalVariantOrder, finalResultsByVariant, weaponData, weaponNames, weaponSources, outputPath)
 	if err != nil {
 		return err
 	}

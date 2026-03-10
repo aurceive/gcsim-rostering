@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/domain"
 	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/weapons"
@@ -71,54 +73,52 @@ func bestAvailableBenchmarks(results []domain.Result, weaponData domain.WeaponDa
 	return bestAvailableTeamDps, bestAvailableCharDps
 }
 
-func ExportResultsXLSX(appRoot string, char string, rosterName string, target domain.Target, variantOrder []string, resultsByVariant map[string][]domain.Result, weaponData domain.WeaponData, weaponNames map[string]string, weaponSources map[string][]string, outputPath string) (string, error) {
-	if len(variantOrder) == 0 {
-		variantOrder = []string{"default"}
+func titleFirstLetter(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
 	}
-	primary := variantOrder[0]
+	r, size := utf8.DecodeRuneInString(s)
+	if r == utf8.RuneError && size == 0 {
+		return ""
+	}
+	return string(unicode.ToUpper(r)) + s[size:]
+}
 
-	// Determine row order from the union of all variants.
-	keySet := make(map[resultKey]struct{})
-	for _, v := range variantOrder {
-		for _, r := range resultsByVariant[v] {
-			keySet[resultKey{Weapon: r.Weapon, Refine: r.Refine}] = struct{}{}
+func formatPartyMembers(partyMembers []string, fallbackChar string) []string {
+	cleaned := make([]string, 0, len(partyMembers))
+	for _, member := range partyMembers {
+		member = titleFirstLetter(member)
+		if member == "" {
+			continue
+		}
+		cleaned = append(cleaned, member)
+	}
+	if len(cleaned) == 0 {
+		fallbackChar = titleFirstLetter(fallbackChar)
+		if fallbackChar != "" {
+			cleaned = append(cleaned, fallbackChar)
 		}
 	}
-	keys := make([]resultKey, 0, len(keySet))
-	for k := range keySet {
-		keys = append(keys, k)
-	}
+	return cleaned
+}
 
-	// Sort rows primarily by selected target in the primary variant, then by weapon key/refine for stability.
-	primaryLookup := make(map[resultKey]domain.Result)
-	for _, r := range resultsByVariant[primary] {
-		primaryLookup[resultKey{Weapon: r.Weapon, Refine: r.Refine}] = r
-	}
-	slices.SortFunc(keys, func(a, b resultKey) int {
-		ra, oka := primaryLookup[a]
-		rb, okb := primaryLookup[b]
-		// Missing results sort last.
-		if !oka && okb {
-			return 1
-		}
-		if oka && !okb {
-			return -1
-		}
-		if oka && okb {
-			if target == domain.TargetTeamDps {
-				if ra.TeamDps != rb.TeamDps {
-					if ra.TeamDps > rb.TeamDps {
-						return -1
-					}
-					return 1
+func sortVariantResults(results []domain.Result, target domain.Target) []domain.Result {
+	out := append([]domain.Result(nil), results...)
+	slices.SortFunc(out, func(a, b domain.Result) int {
+		if target == domain.TargetTeamDps {
+			if a.TeamDps != b.TeamDps {
+				if a.TeamDps > b.TeamDps {
+					return -1
 				}
-			} else {
-				if ra.CharDps != rb.CharDps {
-					if ra.CharDps > rb.CharDps {
-						return -1
-					}
-					return 1
+				return 1
+			}
+		} else {
+			if a.CharDps != b.CharDps {
+				if a.CharDps > b.CharDps {
+					return -1
 				}
+				return 1
 			}
 		}
 		if a.Weapon != b.Weapon {
@@ -135,15 +135,24 @@ func ExportResultsXLSX(appRoot string, char string, rosterName string, target do
 		}
 		return 0
 	})
+	return out
+}
 
-	// Build lookups per variant.
-	lookup := make(map[string]map[resultKey]domain.Result, len(variantOrder))
+func ExportResultsXLSX(appRoot string, char string, partyMembers []string, rosterName string, target domain.Target, variantOrder []string, resultsByVariant map[string][]domain.Result, weaponData domain.WeaponData, weaponNames map[string]string, weaponSources map[string][]string, outputPath string) (string, error) {
+	if len(variantOrder) == 0 {
+		variantOrder = []string{"default"}
+	}
+	const resultsBlockSize = 8
+	const configOnlyBlockSize = 1
+	formattedPartyMembers := formatPartyMembers(partyMembers, char)
+	sortedByVariant := make(map[string][]domain.Result, len(variantOrder))
+	maxRows := 0
 	for _, v := range variantOrder {
-		m := make(map[resultKey]domain.Result)
-		for _, r := range resultsByVariant[v] {
-			m[resultKey{Weapon: r.Weapon, Refine: r.Refine}] = r
+		sorted := sortVariantResults(resultsByVariant[v], target)
+		sortedByVariant[v] = sorted
+		if len(sorted) > maxRows {
+			maxRows = len(sorted)
 		}
-		lookup[v] = m
 	}
 
 	// Export to xlsx
@@ -151,55 +160,68 @@ func ExportResultsXLSX(appRoot string, char string, rosterName string, target do
 	defaultSheet := "Sheet1"
 	sheet := "Results"
 	_ = f.SetSheetName(defaultSheet, sheet)
-	sheetWithConfig := "Results+Config"
+	sheetWithConfig := "Config"
 	_, _ = f.NewSheet(sheetWithConfig)
 
-	// Headers (2 rows):
-	// Row 1: variant name (merged across columns)
-	// Row 2: metric names
+	resultsLastCol := colName(len(variantOrder) * resultsBlockSize)
+	if resultsLastCol == "" {
+		resultsLastCol = "A"
+	}
+	configLastCol := colName(len(variantOrder) * (resultsBlockSize + configOnlyBlockSize))
+	if configLastCol == "" {
+		configLastCol = "A"
+	}
+
 	for _, sh := range []string{sheet, sheetWithConfig} {
-		f.SetCellValue(sh, "A1", "Weapon")
-		f.SetCellValue(sh, "B1", "Refine")
-		_ = f.MergeCell(sh, "A1", "A2")
-		_ = f.MergeCell(sh, "B1", "B2")
+		for i, member := range formattedPartyMembers {
+			f.SetCellValue(sh, fmt.Sprintf("%s1", colName(i+1)), member)
+		}
 	}
 
 	for i, v := range variantOrder {
-		// Results sheet (6 columns per variant)
+		// Results sheet (8 columns per variant)
 		{
-			start := 3 + i*6
+			start := 1 + i*resultsBlockSize
 			startCol := colName(start)
-			endCol := colName(start + 5)
-			_ = f.MergeCell(sheet, fmt.Sprintf("%s1", startCol), fmt.Sprintf("%s1", endCol))
-			f.SetCellValue(sheet, fmt.Sprintf("%s1", startCol), v)
+			endCol := colName(start + resultsBlockSize - 1)
+			_ = f.MergeCell(sheet, fmt.Sprintf("%s2", startCol), fmt.Sprintf("%s2", endCol))
+			f.SetCellValue(sheet, fmt.Sprintf("%s2", startCol), v)
 
-			f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+0)), "Team DPS")
-			f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+1)), "Team %")
-			f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+2)), "Char DPS")
-			f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+3)), "Char %")
-			f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+4)), "ER%")
-			f.SetCellValue(sheet, fmt.Sprintf("%s2", colName(start+5)), "Main Stats")
+			f.SetCellValue(sheet, fmt.Sprintf("%s3", colName(start+0)), "Weapon")
+			f.SetCellValue(sheet, fmt.Sprintf("%s3", colName(start+1)), "Refine")
+			f.SetCellValue(sheet, fmt.Sprintf("%s3", colName(start+2)), "Team DPS")
+			f.SetCellValue(sheet, fmt.Sprintf("%s3", colName(start+3)), "Team %")
+			f.SetCellValue(sheet, fmt.Sprintf("%s3", colName(start+4)), "Char DPS")
+			f.SetCellValue(sheet, fmt.Sprintf("%s3", colName(start+5)), "Char %")
+			f.SetCellValue(sheet, fmt.Sprintf("%s3", colName(start+6)), "ER%")
+			f.SetCellValue(sheet, fmt.Sprintf("%s3", colName(start+7)), "Main Stats")
 		}
 
-		// Results+Config sheet (7 columns per variant)
+		// Results+Config sheet: first metric blocks, then config-only columns.
 		{
-			start := 3 + i*7
+			start := 1 + i*resultsBlockSize
 			startCol := colName(start)
-			endCol := colName(start + 6)
-			_ = f.MergeCell(sheetWithConfig, fmt.Sprintf("%s1", startCol), fmt.Sprintf("%s1", endCol))
-			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s1", startCol), v)
+			endCol := colName(start + resultsBlockSize - 1)
+			_ = f.MergeCell(sheetWithConfig, fmt.Sprintf("%s2", startCol), fmt.Sprintf("%s2", endCol))
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", startCol), v)
 
-			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+0)), "Team DPS")
-			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+1)), "Team %")
-			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+2)), "Char DPS")
-			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+3)), "Char %")
-			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+4)), "ER%")
-			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+5)), "Main Stats")
-			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", colName(start+6)), "Config")
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s3", colName(start+0)), "Weapon")
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s3", colName(start+1)), "Refine")
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s3", colName(start+2)), "Team DPS")
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s3", colName(start+3)), "Team %")
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s3", colName(start+4)), "Char DPS")
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s3", colName(start+5)), "Char %")
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s3", colName(start+6)), "ER%")
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s3", colName(start+7)), "Main Stats")
+
+			cfgCol := len(variantOrder)*resultsBlockSize + 1 + i
+			cfgColName := colName(cfgCol)
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s2", cfgColName), v)
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s3", cfgColName), "Config")
 		}
 	}
 
-	// Header alignment: center horizontally + vertically for rows 1-2.
+	// Header alignment: center horizontally + vertically for rows 1-3.
 	{
 		headerStyleID, err := f.NewStyle(&excelize.Style{
 			Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
@@ -207,19 +229,10 @@ func ExportResultsXLSX(appRoot string, char string, rosterName string, target do
 		if err != nil {
 			return "", err
 		}
-		lastColResults := colName(2 + len(variantOrder)*6)
-		if lastColResults == "" {
-			lastColResults = "B"
-		}
-		if err := f.SetCellStyle(sheet, "A1", fmt.Sprintf("%s2", lastColResults), headerStyleID); err != nil {
+		if err := f.SetCellStyle(sheet, "A1", fmt.Sprintf("%s3", resultsLastCol), headerStyleID); err != nil {
 			return "", err
 		}
-
-		lastColCfg := colName(2 + len(variantOrder)*7)
-		if lastColCfg == "" {
-			lastColCfg = "B"
-		}
-		if err := f.SetCellStyle(sheetWithConfig, "A1", fmt.Sprintf("%s2", lastColCfg), headerStyleID); err != nil {
+		if err := f.SetCellStyle(sheetWithConfig, "A1", fmt.Sprintf("%s3", configLastCol), headerStyleID); err != nil {
 			return "", err
 		}
 	}
@@ -233,84 +246,79 @@ func ExportResultsXLSX(appRoot string, char string, rosterName string, target do
 		bestAvailChar[v] = bc
 	}
 
-	for rowIdx, k := range keys {
-		row := rowIdx + 3
-		name := weaponNames[k.Weapon]
-		if name == "" {
-			name = k.Weapon
-		}
-		f.SetCellValue(sheet, fmt.Sprintf("A%d", row), name)
-		f.SetCellValue(sheet, fmt.Sprintf("B%d", row), k.Refine)
-		f.SetCellValue(sheetWithConfig, fmt.Sprintf("A%d", row), name)
-		f.SetCellValue(sheetWithConfig, fmt.Sprintf("B%d", row), k.Refine)
-
-		for i, v := range variantOrder {
-			start := 3 + i*6
-			r, ok := lookup[v][k]
-			if !ok {
-				continue
+	for i, v := range variantOrder {
+		start := 1 + i*resultsBlockSize
+		cfgCol := len(variantOrder)*resultsBlockSize + 1 + i
+		for rowIdx, r := range sortedByVariant[v] {
+			row := rowIdx + 4
+			name := weaponNames[r.Weapon]
+			if name == "" {
+				name = r.Weapon
 			}
 
-			f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+0), row), r.TeamDps)
+			f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+0), row), name)
+			f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+1), row), r.Refine)
+			f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+2), row), r.TeamDps)
 			if bestAvailTeam[v] > 0 {
-				f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+1), row), float64(r.TeamDps)/float64(bestAvailTeam[v]))
+				f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+3), row), float64(r.TeamDps)/float64(bestAvailTeam[v]))
 			}
-			f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+2), row), r.CharDps)
+			f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+4), row), r.CharDps)
 			if bestAvailChar[v] > 0 {
-				f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+3), row), float64(r.CharDps)/float64(bestAvailChar[v]))
+				f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+5), row), float64(r.CharDps)/float64(bestAvailChar[v]))
 			}
-			f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+4), row), r.Er)
-			f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+5), row), r.MainStats)
+			f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+6), row), r.Er)
+			f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+7), row), r.MainStats)
 
-			startCfg := 3 + i*7
-			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(startCfg+0), row), r.TeamDps)
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(start+0), row), name)
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(start+1), row), r.Refine)
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(start+2), row), r.TeamDps)
 			if bestAvailTeam[v] > 0 {
-				f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(startCfg+1), row), float64(r.TeamDps)/float64(bestAvailTeam[v]))
+				f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(start+3), row), float64(r.TeamDps)/float64(bestAvailTeam[v]))
 			}
-			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(startCfg+2), row), r.CharDps)
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(start+4), row), r.CharDps)
 			if bestAvailChar[v] > 0 {
-				f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(startCfg+3), row), float64(r.CharDps)/float64(bestAvailChar[v]))
+				f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(start+5), row), float64(r.CharDps)/float64(bestAvailChar[v]))
 			}
-			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(startCfg+4), row), r.Er)
-			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(startCfg+5), row), r.MainStats)
-			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(startCfg+6), row), r.Config)
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(start+6), row), r.Er)
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(start+7), row), r.MainStats)
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(cfgCol), row), r.Config)
 		}
 	}
 
 	// Percent formatting: 1.0 => 100%
-	if len(keys) > 0 {
+	if maxRows > 0 {
 		styleID, err := f.NewStyle(&excelize.Style{NumFmt: 10})
 		if err != nil {
 			return "", err
 		}
-		lastRow := len(keys) + 2
+		lastRow := maxRows + 3
 		for i := range variantOrder {
-			start := 3 + i*6
-			teamPctCol := colName(start + 1)
-			charPctCol := colName(start + 3)
-			erCol := colName(start + 4)
-			if err := f.SetCellStyle(sheet, fmt.Sprintf("%s3", teamPctCol), fmt.Sprintf("%s%d", teamPctCol, lastRow), styleID); err != nil {
+			start := 1 + i*resultsBlockSize
+			teamPctCol := colName(start + 3)
+			charPctCol := colName(start + 5)
+			erCol := colName(start + 6)
+			if err := f.SetCellStyle(sheet, fmt.Sprintf("%s4", teamPctCol), fmt.Sprintf("%s%d", teamPctCol, lastRow), styleID); err != nil {
 				return "", err
 			}
-			if err := f.SetCellStyle(sheet, fmt.Sprintf("%s3", charPctCol), fmt.Sprintf("%s%d", charPctCol, lastRow), styleID); err != nil {
+			if err := f.SetCellStyle(sheet, fmt.Sprintf("%s4", charPctCol), fmt.Sprintf("%s%d", charPctCol, lastRow), styleID); err != nil {
 				return "", err
 			}
-			if err := f.SetCellStyle(sheet, fmt.Sprintf("%s3", erCol), fmt.Sprintf("%s%d", erCol, lastRow), styleID); err != nil {
+			if err := f.SetCellStyle(sheet, fmt.Sprintf("%s4", erCol), fmt.Sprintf("%s%d", erCol, lastRow), styleID); err != nil {
 				return "", err
 			}
 		}
 		for i := range variantOrder {
-			start := 3 + i*7
-			teamPctCol := colName(start + 1)
-			charPctCol := colName(start + 3)
-			erCol := colName(start + 4)
-			if err := f.SetCellStyle(sheetWithConfig, fmt.Sprintf("%s3", teamPctCol), fmt.Sprintf("%s%d", teamPctCol, lastRow), styleID); err != nil {
+			start := 1 + i*resultsBlockSize
+			teamPctCol := colName(start + 3)
+			charPctCol := colName(start + 5)
+			erCol := colName(start + 6)
+			if err := f.SetCellStyle(sheetWithConfig, fmt.Sprintf("%s4", teamPctCol), fmt.Sprintf("%s%d", teamPctCol, lastRow), styleID); err != nil {
 				return "", err
 			}
-			if err := f.SetCellStyle(sheetWithConfig, fmt.Sprintf("%s3", charPctCol), fmt.Sprintf("%s%d", charPctCol, lastRow), styleID); err != nil {
+			if err := f.SetCellStyle(sheetWithConfig, fmt.Sprintf("%s4", charPctCol), fmt.Sprintf("%s%d", charPctCol, lastRow), styleID); err != nil {
 				return "", err
 			}
-			if err := f.SetCellStyle(sheetWithConfig, fmt.Sprintf("%s3", erCol), fmt.Sprintf("%s%d", erCol, lastRow), styleID); err != nil {
+			if err := f.SetCellStyle(sheetWithConfig, fmt.Sprintf("%s4", erCol), fmt.Sprintf("%s%d", erCol, lastRow), styleID); err != nil {
 				return "", err
 			}
 		}
