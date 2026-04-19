@@ -223,6 +223,17 @@ func formatProgressLine(completed int, totalRuns int, unitCompleted int, unitTot
 	return fmt.Sprintf("Progress: %d/%d (%.1f%%), unit %d/%d, ETA %s", completed, totalRuns, percent, unitCompleted, unitTotal, eta)
 }
 
+func lastNonEmptyLine(s string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line != "" {
+			return line
+		}
+	}
+	return s
+}
+
 // Run executes the roster optimization flow and returns the desired process exit code.
 func Run() int {
 	return RunWithOptions(Options{})
@@ -613,6 +624,7 @@ func run(appRoot string, opts Options) error {
 	completed := 0
 	start := time.Now()
 
+	var engineFailures []string
 	canceled := false
 	for _, plan := range plans {
 		weapon := plan.key
@@ -665,41 +677,44 @@ func run(appRoot string, opts Options) error {
 
 					simStart := time.Now()
 					res, err := runner.OptimizeAndRun(ctx, tempConfig, optStr)
+					simElapsed += time.Since(simStart)
 					if err != nil {
 						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
 							weaponCompleted = false
 							canceled = true
 							break
 						}
-						return err
-					}
-					simElapsed += time.Since(simStart)
-					teamDps := int(*res.Statistics.DPS.Mean)
-					if len(res.Statistics.CharacterDps) <= charIndex {
-						return fmt.Errorf("engine result missing statistics.character_dps[%d]", charIndex)
-					}
-					charDps := int(*res.Statistics.CharacterDps[charIndex].Mean)
-					if len(res.CharacterDetails) <= charIndex {
-						return fmt.Errorf("engine result missing character_details[%d]", charIndex)
-					}
-					if len(res.CharacterDetails[charIndex].Snapshot) <= 7 {
-						return fmt.Errorf("engine result missing character_details[%d].snapshot[7]", charIndex)
-					}
-					er := res.CharacterDetails[charIndex].Snapshot[7] // ER index
+						// Non-fatal engine error: treat this combo as 0 DPS, continue with remaining combos.
+						errSummary := lastNonEmptyLine(err.Error())
+						fmt.Fprintf(os.Stderr, "WARN: engine error for %s R%d [%s] (%s), skipping combo: %s\n",
+							weapon, ref, variantName, mainStats, errSummary)
+						engineFailures = append(engineFailures, fmt.Sprintf("%s R%d [%s] (%s): %s", weapon, ref, variantName, mainStats, errSummary))
+					} else {
+						teamDps := int(*res.Statistics.DPS.Mean)
+						if len(res.Statistics.CharacterDps) <= charIndex {
+							return fmt.Errorf("engine result missing statistics.character_dps[%d]", charIndex)
+						}
+						charDps := int(*res.Statistics.CharacterDps[charIndex].Mean)
+						if len(res.CharacterDetails) <= charIndex {
+							return fmt.Errorf("engine result missing character_details[%d]", charIndex)
+						}
+						if len(res.CharacterDetails[charIndex].Snapshot) <= 7 {
+							return fmt.Errorf("engine result missing character_details[%d].snapshot[7]", charIndex)
+						}
+						er := res.CharacterDetails[charIndex].Snapshot[7] // ER index
 
-					// Check if better
-					if domain.IsBetterByTarget(target, teamDps, bestTeamDps, charDps, bestCharDps) {
-						bestTeamDps = teamDps
-						bestCharDps = charDps
-						bestEr = er
-						bestMainStats = mainStats
-						bestConfig = res.ConfigFile
+						if domain.IsBetterByTarget(target, teamDps, bestTeamDps, charDps, bestCharDps) {
+							bestTeamDps = teamDps
+							bestCharDps = charDps
+							bestEr = er
+							bestMainStats = mainStats
+							bestConfig = res.ConfigFile
+						}
 					}
 
-					// Progress: вывести процент завершения и ETA после каждой симуляции
+					// Progress: update after each simulation
 					if totalRuns > 0 {
 						completed++
-						// estimate remaining time
 						elapsed := time.Since(start)
 						var etaStr string
 						if completed > 0 {
@@ -728,6 +743,14 @@ func run(appRoot string, opts Options) error {
 
 	if canceled {
 		fmt.Fprintln(os.Stderr, "Interrupted: exporting fully computed weapon+refine+variant entries...")
+	}
+
+	if len(engineFailures) > 0 {
+		fmt.Fprintf(os.Stderr, "\n%d engine error(s) encountered (treated as 0 DPS):\n", len(engineFailures))
+		for _, f := range engineFailures {
+			fmt.Fprintf(os.Stderr, "  - %s\n", f)
+		}
+		fmt.Fprintln(os.Stderr)
 	}
 
 	finalVariantOrder := variantOrder
