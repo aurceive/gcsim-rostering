@@ -39,17 +39,29 @@ func TestExportResultsXLSX_NewLayoutUsesIndependentVariantBlocks(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	if got, _ := f.GetCellValue("Results", "A1"); got != "Raiden" {
-		t.Fatalf("unexpected A1 party header: %q", got)
+	if got, _ := f.GetCellValue("Results", "A1"); got != "Raiden weapon roster" {
+		t.Fatalf("unexpected A1 header: %q", got)
 	}
-	if got, _ := f.GetCellValue("Results", "B1"); got != "Furina" {
-		t.Fatalf("unexpected B1 party header: %q", got)
+	if got, _ := f.GetCellValue("Results", "B1"); got != "" {
+		t.Fatalf("expected B1 to be empty, got: %q", got)
 	}
-	if got, _ := f.GetCellValue("Results", "C1"); got != "Bennett" {
-		t.Fatalf("unexpected C1 party header: %q", got)
+	if got, _ := f.GetCellValue("Results", "C1"); got != "Raiden" {
+		t.Fatalf("unexpected C1 party member: %q", got)
 	}
-	if got, _ := f.GetCellValue("Results", "D1"); got != "Xiangling" {
-		t.Fatalf("unexpected D1 party header: %q", got)
+	if got, _ := f.GetCellValue("Results", "D1"); got != "Furina" {
+		t.Fatalf("unexpected D1 party member: %q", got)
+	}
+	if got, _ := f.GetCellValue("Results", "E1"); got != "Bennett" {
+		t.Fatalf("unexpected E1 party member: %q", got)
+	}
+	if got, _ := f.GetCellValue("Results", "F1"); got != "Xiangling" {
+		t.Fatalf("unexpected F1 party member: %q", got)
+	}
+	if got, _ := f.GetCellValue("Results", "G1"); got != "" {
+		t.Fatalf("expected G1 to be empty, got: %q", got)
+	}
+	if got, _ := f.GetCellValue("Results", "H1"); got == "" {
+		t.Fatalf("expected H1 to contain date, got empty string")
 	}
 	variantA, _ := f.GetCellValue("Results", "A2")
 	variantB, _ := f.GetCellValue("Results", "I2")

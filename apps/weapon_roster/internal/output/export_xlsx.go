@@ -172,10 +172,19 @@ func ExportResultsXLSX(appRoot string, char string, partyMembers []string, roste
 		configLastCol = "A"
 	}
 
+	dateStr := time.Now().Format("2006 01 02")
+	charTitle := titleFirstLetter(char)
 	for _, sh := range []string{sheet, sheetWithConfig} {
-		for i, member := range formattedPartyMembers {
-			f.SetCellValue(sh, fmt.Sprintf("%s1", colName(i+1)), member)
+		f.SetCellValue(sh, "A1", fmt.Sprintf("%s weapon roster", charTitle))
+		// col B (2): skipped
+		for i := 0; i < 4; i++ {
+			if i < len(formattedPartyMembers) {
+				f.SetCellValue(sh, fmt.Sprintf("%s1", colName(3+i)), formattedPartyMembers[i])
+			}
+			// else: leave empty
 		}
+		// col G (7): skipped
+		f.SetCellValue(sh, "H1", dateStr)
 	}
 
 	for i, v := range variantOrder {
