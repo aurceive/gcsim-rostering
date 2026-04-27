@@ -1,6 +1,8 @@
 package app
 
 import (
+	"sort"
+
 	"github.com/genshinsim/gcsim/apps/constellation_comparator/internal/domain"
 )
 
@@ -45,18 +47,11 @@ func GenerateCombinations(chars []string, baselineCons map[string]int, maxAdditi
 
 	recurse(0, 0)
 
-	// Sort: baseline first, then by TotalAdditional ASC (stable, preserves enumeration order within same level).
-	sorted := make([]domain.Combination, 0, len(results))
-	baseline := results[0] // first enumerated is always all-baseline (extra=0 for every char)
-	sorted = append(sorted, baseline)
-	for i := 1; i < len(results); i++ {
-		if results[i].TotalAdditional == 0 {
-			continue // skip (already added baseline above)
-		}
-		sorted = append(sorted, results[i])
-	}
-	// results are already enumerated in extra-ascending order since we iterate extra from 0 upward.
-	return sorted
+	// Sort by TotalAdditional ASC (stable to preserve enumeration order within the same level).
+	sort.SliceStable(results, func(i, j int) bool {
+		return results[i].TotalAdditional < results[j].TotalAdditional
+	})
+	return results
 }
 
 // CountCombinations returns the number of combinations GenerateCombinations would produce.

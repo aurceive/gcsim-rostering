@@ -90,6 +90,19 @@ func TestGenerateCombinations_Key_Stable(t *testing.T) {
 	}
 }
 
+func TestGenerateCombinations_SortedByTotalAdditional(t *testing.T) {
+	chars := []string{"arlecchino", "fischl"}
+	baseline := map[string]int{"arlecchino": 0, "fischl": 0}
+	combos := app.GenerateCombinations(chars, baseline, 3)
+
+	for i := 1; i < len(combos); i++ {
+		if combos[i].TotalAdditional < combos[i-1].TotalAdditional {
+			t.Errorf("combinations not sorted at index %d: TotalAdditional %d < %d",
+				i, combos[i].TotalAdditional, combos[i-1].TotalAdditional)
+		}
+	}
+}
+
 func TestGenerateCombinations_BaselineAlwaysFirst(t *testing.T) {
 	chars := []string{"arlecchino", "fischl"}
 	baseline := map[string]int{"arlecchino": 2, "fischl": 1}

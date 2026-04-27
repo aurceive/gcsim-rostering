@@ -195,6 +195,12 @@ func run(appRoot string, opts Options) error {
 		OptimizeSubstats: cfg.OptimizeSubstats == nil || *cfg.OptimizeSubstats,
 	}
 
+	// Precompute per-block combo counts for block headers.
+	blockCounts := make(map[int]int, 8)
+	for _, c := range missingCombos {
+		blockCounts[c.TotalAdditional]++
+	}
+
 	// ---- Run simulations ---------------------------------------------------
 
 	newResults := make([]domain.RunResult, 0, len(missingCombos))
@@ -204,13 +210,26 @@ func run(appRoot string, opts Options) error {
 
 	total := len(missingCombos)
 	completed := 0
+	blockCompleted := 0
 	startProgress := time.Now()
 	var lastProgressPrint time.Time
+	currentBlock := -1
 
 	for _, combo := range missingCombos {
 		if ctx.Err() != nil {
 			canceled = true
 			break
+		}
+
+		// Block header when entering a new TotalAdditional group.
+		if combo.TotalAdditional != currentBlock {
+			currentBlock = combo.TotalAdditional
+			blockCompleted = 0
+			label := fmt.Sprintf("+%d", currentBlock)
+			if currentBlock == 0 {
+				label = "+0 (baseline)"
+			}
+			fmt.Printf("\n--- %s constellations: %d simulation(s) ---\n", label, blockCounts[currentBlock])
 		}
 
 		// Apply all character cons patches.
@@ -250,7 +269,8 @@ func run(appRoot string, opts Options) error {
 		}
 
 		completed++
-		maybePrintProgress(completed, total, startProgress, &lastProgressPrint)
+		blockCompleted++
+		maybePrintProgress(completed, total, blockCompleted, blockCounts[currentBlock], startProgress, &lastProgressPrint)
 	}
 
 	if canceled {
@@ -374,7 +394,7 @@ func sanitizeName(name string) string {
 	return name
 }
 
-func maybePrintProgress(completed int, total int, start time.Time, lastPrint *time.Time) {
+func maybePrintProgress(completed int, total int, blockCompleted int, blockTotal int, start time.Time, lastPrint *time.Time) {
 	if total <= 0 {
 		return
 	}
@@ -389,7 +409,8 @@ func maybePrintProgress(completed int, total int, start time.Time, lastPrint *ti
 		remaining := time.Duration(float64(elapsed) * float64(total-completed) / float64(completed))
 		etaStr = remaining.Round(time.Second).String()
 	}
-	fmt.Printf("Progress: %d/%d (%.1f%%), ETA %s\n", completed, total, float64(completed)/float64(total)*100.0, etaStr)
+	fmt.Printf("Progress: %d/%d (%.1f%%), block %d/%d, ETA %s\n",
+		completed, total, float64(completed)/float64(total)*100.0, blockCompleted, blockTotal, etaStr)
 }
 
 func lastNonEmptyLine(s string) string {
