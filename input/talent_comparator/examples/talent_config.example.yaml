@@ -12,3 +12,5 @@ engine: gcsim
 
 char: arlecchino
 name: demo
+
+# optimize_substats: true  # включено по умолчанию; поставьте false, чтобы отключить

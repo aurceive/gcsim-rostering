@@ -12,6 +12,10 @@ type Config struct {
 
 	Char string `yaml:"char"`
 	Name string `yaml:"name"`
+
+	// OptimizeSubstats controls whether -substatOptimFull is passed to the engine.
+	// Default (nil or true): optimization enabled.
+	OptimizeSubstats *bool `yaml:"optimize_substats"`
 }
 
 func (c *Config) UnmarshalYAML(value *yaml.Node) error {

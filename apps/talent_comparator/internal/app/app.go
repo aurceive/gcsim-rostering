@@ -91,7 +91,10 @@ func run(appRoot string, opts Options) error {
 	}
 	tempConfig := filepath.Join(workDir, "temp_config.txt")
 
-	runner := sim.CLIRunner{EngineRoot: engineRoot}
+	runner := sim.CLIRunner{
+		EngineRoot:       engineRoot,
+		OptimizeSubstats: cfg.OptimizeSubstats == nil || *cfg.OptimizeSubstats,
+	}
 
 	baseline := domain.TalentLevels{NA: 6, E: 6, Q: 6}
 	startProgress := time.Now()

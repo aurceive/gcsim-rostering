@@ -190,7 +190,10 @@ func run(appRoot string, opts Options) error {
 		return err
 	}
 	tempConfig := filepath.Join(workDir, "temp_config.txt")
-	runner := sim.CLIRunner{EngineRoot: engineRoot}
+	runner := sim.CLIRunner{
+		EngineRoot:       engineRoot,
+		OptimizeSubstats: cfg.OptimizeSubstats == nil || *cfg.OptimizeSubstats,
+	}
 
 	// ---- Run simulations ---------------------------------------------------
 

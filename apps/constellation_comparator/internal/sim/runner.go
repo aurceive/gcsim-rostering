@@ -28,7 +28,8 @@ type SimulationResult struct {
 }
 
 type CLIRunner struct {
-	EngineRoot string
+	EngineRoot       string
+	OptimizeSubstats bool
 }
 
 func (r CLIRunner) Run(ctx context.Context, configPath string) (*SimulationResult, error) {
@@ -40,10 +41,11 @@ func (r CLIRunner) Run(ctx context.Context, configPath string) (*SimulationResul
 	outPath := filepath.Join(filepath.Dir(configPath), "last_result.json")
 	_ = os.Remove(outPath)
 
-	args := []string{
-		"-c", configPath,
-		"-out", outPath,
+	args := []string{"-c", configPath}
+	if r.OptimizeSubstats {
+		args = append(args, "-substatOptimFull")
 	}
+	args = append(args, "-out", outPath)
 	cmd := exec.CommandContext(ctx, engineExe, args...)
 	cmd.Dir = r.EngineRoot
 

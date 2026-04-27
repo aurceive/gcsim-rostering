@@ -7,6 +7,7 @@
 # max_additional: (необязательно) суммарный лимит дополнительных созвездий.
 #   Если не задан — перебираются все комбинации без ограничения.
 #   4 перса на C0, без ограничения → 7^4 = 2401 симуляций.
+# optimize_substats: балансировка сабстатов (-substatOptimFull). Включена по умолчанию.
 # ignore_existing_results: если true — не читать сегодняшний xlsx, начать заново.
 
 engine: gcsim
@@ -22,5 +23,7 @@ chars:
   - chevreuse
 
 # max_additional: 6
+
+# optimize_substats: true  # включено по умолчанию; поставьте false, чтобы отключить
 
 ignore_existing_results: true

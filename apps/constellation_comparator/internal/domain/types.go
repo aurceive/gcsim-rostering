@@ -13,6 +13,10 @@ type Config struct {
 	Chars         []string `yaml:"chars"`
 	MaxAdditional *int     `yaml:"max_additional"`
 
+	// OptimizeSubstats controls whether -substatOptimFull is passed to the engine.
+	// Default (nil or true): optimization enabled.
+	OptimizeSubstats *bool `yaml:"optimize_substats"`
+
 	IgnoreExistingResults bool `yaml:"ignore_existing_results"`
 }
 
