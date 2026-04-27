@@ -2,6 +2,12 @@
 #
 # chars: список от 0 до 4 персонажей, у которых повышаем созвездия.
 #         Каждый должен присутствовать в config.txt в строке '<char> char lvl=...'
+#         Опционально после имени можно задать ограничения через пробел:
+#           "fischl 4"       — верхняя граница C4, нижняя берётся из config.txt
+#           "fischl 2 5"     — диапазон C2..C5 включительно
+#           "fischl +3 +5"   — принудительно включить C3 и C5 (вне диапазона)
+#           "fischl -0 -1"   — принудительно исключить C0 и C1 (наивысший приоритет)
+#         Можно комбинировать: "fischl 2 5 +0 -3" — диапазон C2..C5, плюс C0, без C3
 # name:  произвольное имя прогона (пойдёт в имя xlsx)
 # engine / engine_path: по умолчанию используется engines/gcsim
 # max_additional: (необязательно) суммарный лимит дополнительных созвездий.
@@ -19,11 +25,15 @@ engine: gcsim
 name: demo
 
 chars:
-  - arlecchino
-  - chevreuse
+  - arlecchino           # C0 (из config.txt) .. C6
+  # - chevreuse 4        # C0 (из config.txt) .. C4
+  - chevreuse 5 6        # C5..C6
+  - fischl 6 6           # C6..C6 (только C6)
+  # - fischl 2 5         # C2..C5
+  # - bennett +0 -3      # C0..C6 + принудительно C0, без C3
 
 # max_additional: 6
 
-# optimize_substats: true  # включено по умолчанию; поставьте false, чтобы отключить
+# optimize_substats: false  # включено по умолчанию; поставьте false, чтобы отключить
 
-ignore_existing_results: true
+# ignore_existing_results: true

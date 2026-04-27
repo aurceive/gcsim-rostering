@@ -7,10 +7,11 @@ import (
 )
 
 // GenerateCombinations returns all constellation-level combinations for the given characters.
-// baselineCons maps character name to their baseline cons level in the config.
+// allowedByChar maps each character name to its sorted list of allowed constellation levels.
+// TotalAdditional is computed relative to each character's minimum allowed level (allowedByChar[ch][0]).
 // maxAdditional < 0 means unlimited.
-// The first element is always the baseline (TotalAdditional == 0).
-func GenerateCombinations(chars []string, baselineCons map[string]int, maxAdditional int) []domain.Combination {
+// Results are sorted by TotalAdditional ASC; the baseline (TotalAdditional == 0) is always first.
+func GenerateCombinations(chars []string, allowedByChar map[string][]int, maxAdditional int) []domain.Combination {
 	if len(chars) == 0 {
 		return []domain.Combination{{ConsByChar: map[string]int{}, TotalAdditional: 0}}
 	}
@@ -33,14 +34,14 @@ func GenerateCombinations(chars []string, baselineCons map[string]int, maxAdditi
 		}
 
 		char := chars[idx]
-		base := baselineCons[char]
-		maxCons := 6 - base
-
-		for extra := 0; extra <= maxCons; extra++ {
+		levels := allowedByChar[char]
+		minLevel := levels[0]
+		for _, level := range levels {
+			extra := level - minLevel
 			if maxAdditional >= 0 && totalExtra+extra > maxAdditional {
-				break
+				break // levels are sorted; further values only grow
 			}
-			current[char] = base + extra
+			current[char] = level
 			recurse(idx+1, totalExtra+extra)
 		}
 	}
@@ -55,6 +56,6 @@ func GenerateCombinations(chars []string, baselineCons map[string]int, maxAdditi
 }
 
 // CountCombinations returns the number of combinations GenerateCombinations would produce.
-func CountCombinations(chars []string, baselineCons map[string]int, maxAdditional int) int {
-	return len(GenerateCombinations(chars, baselineCons, maxAdditional))
+func CountCombinations(chars []string, allowedByChar map[string][]int, maxAdditional int) int {
+	return len(GenerateCombinations(chars, allowedByChar, maxAdditional))
 }

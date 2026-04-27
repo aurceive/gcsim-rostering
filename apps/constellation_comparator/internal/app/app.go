@@ -79,20 +79,26 @@ func run(appRoot string, opts Options) error {
 		return fmt.Errorf("constellation_config.yaml: name is required")
 	}
 
-	// ---- Validate and de-duplicate chars -----------------------------------
+	// ---- Validate and de-duplicate chars, build per-char constraints -------
 
 	seen := make(map[string]struct{}, len(cfg.Chars))
 	chars := make([]string, 0, len(cfg.Chars))
-	for _, ch := range cfg.Chars {
-		ch = strings.TrimSpace(ch)
-		if ch == "" {
+	charEntryStrs := make([]string, 0, len(cfg.Chars))
+	for _, entry := range cfg.Chars {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
 			continue
 		}
-		if _, ok := seen[ch]; ok {
-			return fmt.Errorf("constellation_config.yaml: duplicate char %q", ch)
+		name := appconfig.ExtractCharName(entry)
+		if name == "" {
+			continue
 		}
-		seen[ch] = struct{}{}
-		chars = append(chars, ch)
+		if _, ok := seen[name]; ok {
+			return fmt.Errorf("constellation_config.yaml: duplicate char %q", name)
+		}
+		seen[name] = struct{}{}
+		chars = append(chars, name)
+		charEntryStrs = append(charEntryStrs, entry)
 	}
 	if len(chars) == 0 {
 		return fmt.Errorf("constellation_config.yaml: at least one char is required")
@@ -101,15 +107,21 @@ func run(appRoot string, opts Options) error {
 		return fmt.Errorf("constellation_config.yaml: at most 4 chars allowed, got %d", len(chars))
 	}
 
-	// ---- Read baseline constellations from config.txt ----------------------
+	// ---- Read baseline constellations from config.txt and build allowed levels
 
-	baselineCons := make(map[string]int, len(chars))
-	for _, ch := range chars {
-		level, err := appconfig.ParseCurrentCons(configStr, ch)
+	allowedByChar := make(map[string][]int, len(chars))
+	minLevels := make(map[string]int, len(chars))
+	for i, ch := range chars {
+		baselineCons, err := appconfig.ParseCurrentCons(configStr, ch)
 		if err != nil {
 			return fmt.Errorf("config.txt: %w", err)
 		}
-		baselineCons[ch] = level
+		entry, err := appconfig.ParseCharEntry(charEntryStrs[i], baselineCons)
+		if err != nil {
+			return fmt.Errorf("constellation_config.yaml: %w", err)
+		}
+		allowedByChar[ch] = entry.AllowedLevels
+		minLevels[ch] = entry.AllowedLevels[0]
 	}
 
 	// ---- Resolve engine ----------------------------------------------------
@@ -129,7 +141,7 @@ func run(appRoot string, opts Options) error {
 		}
 	}
 
-	combos := GenerateCombinations(chars, baselineCons, maxAdditional)
+	combos := GenerateCombinations(chars, allowedByChar, maxAdditional)
 	fmt.Printf("Total combinations to simulate: %d\n", len(combos))
 
 	// ---- Resume: find and import existing results --------------------------
@@ -147,11 +159,11 @@ func run(appRoot string, opts Options) error {
 				fmt.Fprintf(os.Stderr, "WARN: could not import existing results (%v); starting fresh\n", err)
 				basePath = ""
 			} else {
-				// Fix up TotalAdditional from baseline.
+				// Fix up TotalAdditional relative to each char's minimum allowed level.
 				for i := range imported {
 					total := 0
 					for _, ch := range chars {
-						total += imported[i].Combination.ConsByChar[ch] - baselineCons[ch]
+						total += imported[i].Combination.ConsByChar[ch] - minLevels[ch]
 					}
 					if total < 0 {
 						total = 0
