@@ -20,6 +20,8 @@
 - grow_roster: `scripts/grow_roster/bootstrap.ps1`
 - enka_import: `scripts/enka_import/bootstrap.ps1`
 - wfpsim_discord_archiver: `scripts/wfpsim_discord_archiver/bootstrap.ps1`
+- constellation_comparator: `scripts/constellation_comparator/bootstrap.ps1`
+- talent_comparator: `scripts/talent_comparator/bootstrap.ps1`
 
 Скрипт приложения:
 
@@ -53,6 +55,16 @@
 
   - основной: `apps/enka_import/enka_import.exe`
   - на примерах: `apps/enka_import/enka_import.exe -useExamples`
+
+- constellation_comparator:
+
+  - основной: `apps/constellation_comparator/constellation_comparator.exe`
+  - на примерах: `apps/constellation_comparator/constellation_comparator.exe -useExamples`
+
+- talent_comparator:
+
+  - основной: `apps/talent_comparator/talent_comparator.exe`
+  - на примерах: `apps/talent_comparator/talent_comparator.exe -useExamples`
 
 ## Запуск server mode для движков
 

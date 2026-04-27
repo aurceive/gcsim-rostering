@@ -1,0 +1,26 @@
+# Настройки приложения constellation_comparator
+#
+# chars: список от 0 до 4 персонажей, у которых повышаем созвездия.
+#         Каждый должен присутствовать в config.txt в строке '<char> char lvl=...'
+# name:  произвольное имя прогона (пойдёт в имя xlsx)
+# engine / engine_path: по умолчанию используется engines/gcsim
+# max_additional: (необязательно) суммарный лимит дополнительных созвездий.
+#   Если не задан — перебираются все комбинации без ограничения.
+#   4 перса на C0, без ограничения → 7^4 = 2401 симуляций.
+# ignore_existing_results: если true — не читать сегодняшний xlsx, начать заново.
+
+engine: gcsim
+# engine: wfpsim
+# engine: custom
+# engine: wfpsim-custom
+# engine_path: "C:/path/to/your/engines/gcsim"
+
+name: demo
+
+chars:
+  - arlecchino
+  - chevreuse
+
+# max_additional: 6
+
+ignore_existing_results: true
