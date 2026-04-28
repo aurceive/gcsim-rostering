@@ -9,7 +9,7 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-// ImportResultsXLSX reads the "Full" sheet from an existing constellation_comparator XLSX file
+// ImportResultsXLSX reads the Full-table data from an existing constellation_comparator XLSX file
 // and reconstructs []domain.RunResult for resume support.
 func ImportResultsXLSX(path string, chars []string) ([]domain.RunResult, error) {
 	f, err := excelize.OpenFile(path)
@@ -18,7 +18,7 @@ func ImportResultsXLSX(path string, chars []string) ([]domain.RunResult, error) 
 	}
 	defer func() { _ = f.Close() }()
 
-	const sheet = "Full"
+	const sheet = "Results"
 	if idx, _ := f.GetSheetIndex(sheet); idx == -1 {
 		return nil, fmt.Errorf("xlsx %q: missing sheet %q", path, sheet)
 	}
@@ -33,18 +33,30 @@ func ImportResultsXLSX(path string, chars []string) ([]domain.RunResult, error) 
 
 	header := rows[0]
 
-	// Locate columns by header name.
-	teamDpsCol := -1
-	charCols := make(map[string]int, len(chars)) // char name -> 0-based col index
-
+	// The Full table starts 3 columns before "Best %" (layout: Доп.конст, Team DPS, Team %, Best %, chars...).
+	// Set scanStart to the beginning of the Full table so we don't miss "Team DPS".
+	scanStart := 0
 	for col, h := range header {
-		h = strings.TrimSpace(h)
-		if strings.EqualFold(h, "Team DPS") {
+		if strings.EqualFold(strings.TrimSpace(h), "Best %") {
+			if col >= 3 {
+				scanStart = col - 3 // back to "Доп. конст" of the Full table
+			}
+			break
+		}
+	}
+
+	// Locate columns by header name, searching only from scanStart onward.
+	teamDpsCol := -1
+	charCols := make(map[string]int, len(chars))
+
+	for col := scanStart; col < len(header); col++ {
+		h := strings.TrimSpace(header[col])
+		if teamDpsCol == -1 && strings.EqualFold(h, "Team DPS") {
 			teamDpsCol = col
 			continue
 		}
 		for _, ch := range chars {
-			if strings.EqualFold(h, ch) {
+			if _, already := charCols[ch]; !already && strings.EqualFold(h, ch) {
 				charCols[ch] = col
 				break
 			}
@@ -60,11 +72,10 @@ func ImportResultsXLSX(path string, chars []string) ([]domain.RunResult, error) 
 		}
 	}
 
-	// Find the Sim Config column (last column in the header).
+	// Find the rightmost "Sim Config" column (Full config is the last one).
 	configCol := -1
 	for col := len(header) - 1; col >= 0; col-- {
-		h := strings.TrimSpace(header[col])
-		if strings.EqualFold(h, "Sim Config") {
+		if strings.EqualFold(strings.TrimSpace(header[col]), "Sim Config") {
 			configCol = col
 			break
 		}
@@ -79,7 +90,6 @@ func ImportResultsXLSX(path string, chars []string) ([]domain.RunResult, error) 
 			continue
 		}
 
-		// Parse TeamDps.
 		var teamDps int
 		if teamDpsCol < len(row) {
 			v, err := strconv.Atoi(strings.TrimSpace(row[teamDpsCol]))
@@ -88,15 +98,12 @@ func ImportResultsXLSX(path string, chars []string) ([]domain.RunResult, error) 
 			}
 		}
 
-		// Parse each char's constellation level.
 		consByChar := make(map[string]int, len(chars))
-		totalAdditional := 0
 		for _, ch := range chars {
 			col := charCols[ch]
 			var consLevel int
 			if col < len(row) {
 				cell := strings.TrimSpace(row[col])
-				// Stored as "C0", "C1", …, "C6"
 				if strings.HasPrefix(strings.ToUpper(cell), "C") {
 					n, err := strconv.Atoi(cell[1:])
 					if err == nil && n >= 0 && n <= 6 {
@@ -107,9 +114,7 @@ func ImportResultsXLSX(path string, chars []string) ([]domain.RunResult, error) 
 			consByChar[ch] = consLevel
 		}
 
-		// TotalAdditional will be recomputed from baseline when we have it.
-		// For now store raw cons; the app.go resume logic will rebuild TotalAdditional.
-		combo := domain.Combination{ConsByChar: consByChar, TotalAdditional: totalAdditional}
+		combo := domain.Combination{ConsByChar: consByChar}
 
 		cfg := ""
 		if configCol >= 0 && configCol < len(row) {

@@ -149,11 +149,17 @@ func run(appRoot string, opts Options) error {
 	var existingResults []domain.RunResult
 	basePath := ""
 	if !cfg.IgnoreExistingResults {
-		if existing, ok, err := findExistingResultTable(appRoot, name); err != nil {
+		if cfg.ImportPath != "" {
+			// Explicit import path provided.
+			basePath = cfg.ImportPath
+			fmt.Printf("Importing results from: %s\n", basePath)
+		} else if existing, ok, err := findExistingResultTable(appRoot, name); err != nil {
 			return err
 		} else if ok {
 			basePath = existing
 			fmt.Printf("Found existing results: %s\n", filepath.Base(basePath))
+		}
+		if basePath != "" {
 			imported, err := output.ImportResultsXLSX(basePath, chars)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "WARN: could not import existing results (%v); starting fresh\n", err)

@@ -17,7 +17,8 @@ type Config struct {
 	// Default (nil or true): optimization enabled.
 	OptimizeSubstats *bool `yaml:"optimize_substats"`
 
-	IgnoreExistingResults bool `yaml:"ignore_existing_results"`
+	IgnoreExistingResults bool   `yaml:"ignore_existing_results"`
+	ImportPath            string `yaml:"import_path"`
 }
 
 // Combination holds a concrete set of constellation levels for the tracked characters.
