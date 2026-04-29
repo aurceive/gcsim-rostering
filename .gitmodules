@@ -17,3 +17,4 @@
 	path = engines/wfpsim-custom
 	url = https://github.com/aurceive/gcsim.git
 	branch = wfpsim-custom
+	shallow = true
