@@ -15,8 +15,9 @@ import (
 )
 
 type Writer struct {
-	path      string
-	sheetName string
+	path            string
+	sheetName       string
+	secondSheetName string
 
 	mu sync.Mutex
 }
@@ -25,7 +26,11 @@ func New(path string, sheetName string) *Writer {
 	if strings.TrimSpace(sheetName) == "" {
 		sheetName = "wfpsim"
 	}
-	return &Writer{path: filepath.Clean(path), sheetName: sheetName}
+	return &Writer{
+		path:            filepath.Clean(path),
+		sheetName:       sheetName,
+		secondSheetName: sheetName + "-by-date",
+	}
 }
 
 var header = []string{
@@ -49,6 +54,30 @@ var header = []string{
 	"SimVersion",
 	"SchemaMajor",
 	"SchemaMinor",
+}
+
+// headerDateFirst is the column layout for the second sheet:
+// DiscordMessageCreatedAt is first; all other columns follow in the same relative order.
+var headerDateFirst = []string{
+	"DiscordMessageCreatedAt", // 0 (moved from 5)
+	"TeamCharactersUI",        // 1
+	"TeamWeapons",             // 2
+	"TeamDpsMean",             // 3
+	"ShareURL",                // 4
+	"ConfigFile",              // 5
+	"DiscordAuthor",           // 6
+	"TeamCharacters",          // 7
+	"TeamConstellations",      // 8
+	"FetchedAt",               // 9
+	"DiscordGuildID",          // 10
+	"DiscordChannelID",        // 11
+	"DiscordMessageID",        // 12
+	"DiscordMessageURL",       // 13
+	"Key",                     // 14
+	"TeamDpsQ2",               // 15
+	"SimVersion",              // 16
+	"SchemaMajor",             // 17
+	"SchemaMinor",             // 18
 }
 
 // Indexes in the incoming row produced by buildRow (kept stable for Apps Script).
@@ -80,6 +109,7 @@ type record struct {
 	TeamConsSort  string
 	DpsMean       float64
 	FetchedAtTime time.Time
+	CreatedAt     time.Time
 	Row           []interface{}
 }
 
@@ -238,6 +268,10 @@ func (w *Writer) AppendRow(ctx context.Context, row []interface{}, key string, m
 		}
 	}
 
+	if err := w.writeSecondSheet(f, recs); err != nil {
+		return err
+	}
+
 	// excelize determines format by extension; keep .xlsx for temp files.
 	tmp := w.path + ".tmp.xlsx"
 	if err := f.SaveAs(tmp); err != nil {
@@ -265,6 +299,80 @@ func normalizeRow(row []interface{}) []interface{} {
 		}
 	}
 	return out
+}
+
+// writeSecondSheet writes the second sheet (date-first layout) to f.
+// Columns: DiscordMessageCreatedAt first, then the rest in the same relative order.
+// Rows are sorted by DiscordMessageCreatedAt DESC; TeamCharactersUI is filled on every row.
+func (w *Writer) writeSecondSheet(f *excelize.File, recs []record) error {
+	if w.secondSheetName == "" || w.secondSheetName == w.sheetName {
+		return nil
+	}
+
+	// Sort a copy by CreatedAt DESC (zero/empty timestamps last).
+	byDate := make([]record, len(recs))
+	copy(byDate, recs)
+	sort.Slice(byDate, func(i, j int) bool {
+		ti := byDate[i].CreatedAt
+		tj := byDate[j].CreatedAt
+		if ti.IsZero() && !tj.IsZero() {
+			return false
+		}
+		if !ti.IsZero() && tj.IsZero() {
+			return true
+		}
+		if !ti.Equal(tj) {
+			return ti.After(tj) // DESC
+		}
+		return byDate[i].Key < byDate[j].Key
+	})
+
+	if _, err := f.NewSheet(w.secondSheetName); err != nil {
+		return fmt.Errorf("xlsx new sheet (date): %w", err)
+	}
+
+	// Header
+	for c, v := range headerDateFirst {
+		cell := cellName(c, 1)
+		if err := f.SetCellValue(w.secondSheetName, cell, v); err != nil {
+			return err
+		}
+	}
+
+	// Data: TeamCharactersUI always filled (no blank-for-group rule on this sheet).
+	for rIdx, rec := range byDate {
+		rowNum := rIdx + 2
+		row := rec.Row // always len(header) = 19 elements (from normalizeRow)
+		secondRow := []interface{}{
+			row[5],          // DiscordMessageCreatedAt → pos 0
+			rec.TeamCharsUI, // TeamCharactersUI → pos 1 (always filled)
+			row[1],          // TeamWeapons → pos 2
+			row[2],          // TeamDpsMean → pos 3
+			row[3],          // ShareURL → pos 4
+			row[4],          // ConfigFile → pos 5
+			row[6],          // DiscordAuthor → pos 6
+			row[7],          // TeamCharacters → pos 7
+			row[8],          // TeamConstellations → pos 8
+			row[9],          // FetchedAt → pos 9
+			row[10],         // DiscordGuildID → pos 10
+			row[11],         // DiscordChannelID → pos 11
+			row[12],         // DiscordMessageID → pos 12
+			row[13],         // DiscordMessageURL → pos 13
+			row[14],         // Key → pos 14
+			row[15],         // TeamDpsQ2 → pos 15
+			row[16],         // SimVersion → pos 16
+			row[17],         // SchemaMajor → pos 17
+			row[18],         // SchemaMinor → pos 18
+		}
+		for c, v := range secondRow {
+			cell := cellName(c, rowNum)
+			if err := f.SetCellValue(w.secondSheetName, cell, v); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func recordFromRow(row []interface{}, key string) (record, error) {
@@ -316,6 +424,12 @@ func recordFromRow(row []interface{}, key string) (record, error) {
 	if s, ok := rec.Row[9].(string); ok {
 		if t, err := time.Parse(time.RFC3339, s); err == nil {
 			rec.FetchedAtTime = t
+		}
+	}
+	// DiscordMessageCreatedAt parse (header index 5)
+	if s, ok := rec.Row[5].(string); ok {
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			rec.CreatedAt = t
 		}
 	}
 
@@ -395,6 +509,12 @@ func recordFromStrings(r []string, colIndex map[string]int) (record, bool) {
 	if s, ok := rec.Row[9].(string); ok {
 		if t, err := time.Parse(time.RFC3339, s); err == nil {
 			rec.FetchedAtTime = t
+		}
+	}
+	// DiscordMessageCreatedAt parse (header index 5)
+	if s, ok := rec.Row[5].(string); ok {
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			rec.CreatedAt = t
 		}
 	}
 	return rec, true

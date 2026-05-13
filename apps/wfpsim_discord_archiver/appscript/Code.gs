@@ -70,6 +70,9 @@ function doPost(e) {
     // Apply table rules: custom sort + merge UI blocks.
     sortAndMerge_(sh);
 
+    // Rebuild the date-sorted second sheet.
+    refreshDateSheet_(ss, sh);
+
     return jsonResponse_(200, { ok: true, appended: appended });
   } catch (err) {
     return jsonResponse_(500, { ok: false, error: String(err && err.stack ? err.stack : err) });
@@ -366,4 +369,106 @@ function jsonResponse_(status, obj) {
 // One-time helper: run manually in Apps Script editor.
 function setApiKeyForScript_(key) {
   PropertiesService.getScriptProperties().setProperty("API_KEY", String(key || ""));
+}
+
+// refreshDateSheet_ rebuilds the second sheet (mainName + "-by-date") from the main sheet data.
+// Column layout: DiscordMessageCreatedAt first, then the rest in the same relative order.
+// Sorted by DiscordMessageCreatedAt DESC. TeamCharactersUI is filled on every row.
+function refreshDateSheet_(ss, mainSh) {
+  var mainName = mainSh.getName();
+  var secondName = mainName + "-by-date";
+
+  var secondSh = ss.getSheetByName(secondName);
+  if (!secondSh) {
+    secondSh = ss.insertSheet(secondName);
+  }
+
+  var lastRow = mainSh.getLastRow();
+  if (lastRow <= 1) {
+    secondSh.clearContents();
+    return;
+  }
+
+  var lastCol = mainSh.getLastColumn();
+  var mainHeaderRow = mainSh.getRange(1, 1, 1, lastCol).getValues()[0];
+  var col = buildColIndex_(mainHeaderRow);
+
+  var mainData = mainSh.getRange(2, 1, lastRow - 1, lastCol).getValues();
+
+  var secondHeader = [
+    "DiscordMessageCreatedAt",
+    "TeamCharactersUI",
+    "TeamWeapons",
+    "TeamDpsMean",
+    "ShareURL",
+    "ConfigFile",
+    "DiscordAuthor",
+    "TeamCharacters",
+    "TeamConstellations",
+    "FetchedAt",
+    "DiscordGuildID",
+    "DiscordChannelID",
+    "DiscordMessageID",
+    "DiscordMessageURL",
+    "ShareKey",
+    "TeamDpsQ2",
+    "SimVersion",
+    "SchemaMajor",
+    "SchemaMinor"
+  ];
+
+  function getCol_(r, name) {
+    var idx = col[name];
+    return (idx != null && idx < r.length) ? r[idx] : "";
+  }
+
+  var rows = [];
+  for (var i = 0; i < mainData.length; i++) {
+    var r = mainData[i];
+    var teamChars = safeStr_(getCol_(r, "TeamCharacters"));
+    var teamCons  = safeStr_(getCol_(r, "TeamConstellations"));
+    // Recompute UI from technical columns so blank rows from the main sheet are filled.
+    var ui = buildTeamCharsUI_(teamChars, teamCons);
+    rows.push([
+      getCol_(r, "DiscordMessageCreatedAt"),
+      ui,
+      getCol_(r, "TeamWeapons"),
+      getCol_(r, "TeamDpsMean"),
+      getCol_(r, "ShareURL"),
+      getCol_(r, "ConfigFile"),
+      getCol_(r, "DiscordAuthor"),
+      teamChars,
+      teamCons,
+      getCol_(r, "FetchedAt"),
+      getCol_(r, "DiscordGuildID"),
+      getCol_(r, "DiscordChannelID"),
+      getCol_(r, "DiscordMessageID"),
+      getCol_(r, "DiscordMessageURL"),
+      getCol_(r, "ShareKey"),
+      getCol_(r, "TeamDpsQ2"),
+      getCol_(r, "SimVersion"),
+      getCol_(r, "SchemaMajor"),
+      getCol_(r, "SchemaMinor")
+    ]);
+  }
+
+  // Sort by DiscordMessageCreatedAt DESC; empty/zero timestamps last.
+  rows.sort(function (a, b) {
+    var va = a[0];
+    var vb = b[0];
+    // Convert Date objects to ISO strings for consistent comparison.
+    var da = (va instanceof Date) ? va.toISOString() : safeStr_(va);
+    var db = (vb instanceof Date) ? vb.toISOString() : safeStr_(vb);
+    if (da === "" && db !== "") return 1;
+    if (db === "" && da !== "") return -1;
+    if (da !== db) return da > db ? -1 : 1; // DESC
+    return 0;
+  });
+
+  secondSh.clearContents();
+  secondSh.getRange(1, 1, 1, secondHeader.length).setValues([secondHeader]);
+  if (rows.length > 0) {
+    secondSh.getRange(2, 1, rows.length, secondHeader.length).setValues(rows);
+  }
+  applyFixedRowHeights_(secondSh, rows.length + 1);
 }
