@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -21,6 +23,8 @@ import (
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/sheetsapi"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/state"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/wfpsim"
+	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/xlsxscan"
+	"github.com/xuri/excelize/v2"
 )
 
 // Example line in config_file:
@@ -47,11 +51,15 @@ func Run(ctx context.Context, cfg config.Config) error {
 	}
 	st.LastRunStarted = time.Now()
 
-	dc, err := discord.New(cfg.Discord.Token)
-	if err != nil {
-		return fmt.Errorf("discord client: %w", err)
+	var dc *discord.Client
+	if cfg.Run.Mode != "googleSheets" {
+		var err2 error
+		dc, err2 = discord.New(cfg.Discord.Token)
+		if err2 != nil {
+			return fmt.Errorf("discord client: %w", err2)
+		}
+		defer dc.Close()
 	}
-	defer dc.Close()
 
 	localPath := filepath.Clean(filepath.Join("output", "wfpsim_discord_archiver", "archive.xlsx"))
 	localWriter := localxlsx.New(localPath, cfg.Sheet.Name)
@@ -93,6 +101,39 @@ func Run(ctx context.Context, cfg config.Config) error {
 	cutoff := time.Now().Add(-time.Duration(cfg.Run.SinceDays) * 24 * time.Hour)
 	seenKeys := map[string]struct{}{}
 	channelGuildID := map[string]string{}
+
+	if cfg.Run.Mode == "googleSheets" {
+		fmt.Printf("Using run.mode=googleSheets (source sheet id=%s gid=%s)\n",
+			cfg.Run.GoogleSheets.ID, cfg.Run.GoogleSheets.GID)
+
+		keys, err := fetchGoogleSheetsKeys(cfg.Run.GoogleSheets.ID, cfg.Run.GoogleSheets.GID)
+		if err != nil {
+			return fmt.Errorf("fetch google sheets: %w", err)
+		}
+		fmt.Printf("Found %d wfpsim keys in source sheet\n", len(keys))
+
+		for _, key := range keys {
+			if _, ok := st.ProcessedKeys[key]; ok {
+				continue
+			}
+			fmt.Printf("Fetching share for key %s...\n", key)
+			share, err := wc.FetchShare(ctx, key)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "wfpsim fetch failed key=%s err=%v\n", key, err)
+				continue
+			}
+			row, err := buildRowFromKey(key, share, aliasResolver)
+			if err != nil {
+				return err
+			}
+			if err := writer.AppendRow(ctx, row, key, ""); err != nil {
+				return err
+			}
+			totalNewKeys++
+			st.ProcessedKeys[key] = time.Now()
+		}
+		goto finalize
+	}
 
 	if cfg.Run.Mode == "guildSearch" {
 		fmt.Printf("Using run.mode=guildSearch\n")
@@ -367,6 +408,122 @@ func buildRow(guildID string, m discord.Message, key string, share wfpsim.Share,
 		share.SchemaVersion.Minor,
 		strings.Join(cons, ","),
 	}, nil
+}
+
+// buildRowFromKey builds a row without Discord context (for googleSheets mode).
+// Discord-specific fields (guildID, channelID, messageID, messageURL, author, createdAt) are left empty.
+func buildRowFromKey(key string, share wfpsim.Share, aliasResolver *charalias.Resolver) ([]interface{}, error) {
+	type pair struct {
+		char   string
+		weapon string
+	}
+	pairs := make([]pair, 0, len(share.CharacterDetails))
+	for _, c := range share.CharacterDetails {
+		w := ""
+		if c.Weapon.Name != "" {
+			if c.Weapon.Refine > 0 {
+				w = fmt.Sprintf("%s(r%d)", c.Weapon.Name, c.Weapon.Refine)
+			} else {
+				w = c.Weapon.Name
+			}
+		}
+		pairs = append(pairs, pair{char: c.Name, weapon: w})
+	}
+	sort.Slice(pairs, func(i, j int) bool { return pairs[i].char < pairs[j].char })
+
+	chars := make([]string, 0, len(pairs))
+	weps := make([]string, 0, len(pairs))
+	consByChar, err := parseConsByChar(share.ConfigFile, aliasResolver)
+	if err != nil {
+		return nil, err
+	}
+	cons := make([]string, 0, len(pairs))
+	for _, p := range pairs {
+		chars = append(chars, p.char)
+		weps = append(weps, p.weapon)
+		lookup := strings.ToLower(p.char)
+		if aliasResolver != nil {
+			canon, ok := aliasResolver.Canonicalize(lookup)
+			if !ok {
+				return nil, fmt.Errorf("unknown character key %q (engine root=%s)", lookup, aliasResolver.EngineRoot())
+			}
+			lookup = canon
+		}
+		if v, ok := consByChar[lookup]; ok {
+			cons = append(cons, fmt.Sprintf("C%d", v))
+		} else {
+			if aliasResolver != nil {
+				return nil, fmt.Errorf("missing cons for character %q (engine root=%s)", lookup, aliasResolver.EngineRoot())
+			}
+			cons = append(cons, "")
+		}
+	}
+
+	shareURL := fmt.Sprintf("https://wfpsim.com/sh/%s", key)
+
+	return []interface{}{
+		time.Now().Format(time.RFC3339),
+		"", // guildID
+		"", // channelID
+		"", // messageID
+		"", // messageURL
+		"", // author
+		"", // createdAt
+		key,
+		shareURL,
+		strings.Join(chars, ","),
+		strings.Join(weps, ","),
+		share.Statistics.DPS.Mean,
+		share.Statistics.DPS.Q2,
+		share.ConfigFile,
+		share.SimVersion,
+		share.SchemaVersion.Major,
+		share.SchemaVersion.Minor,
+		strings.Join(cons, ","),
+	}, nil
+}
+
+// fetchGoogleSheetsKeys downloads the spreadsheet as XLSX and returns all wfpsim share keys found in it.
+func fetchGoogleSheetsKeys(sheetID, gid string) ([]string, error) {
+	exportURL := fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/export?format=xlsx", sheetID)
+	if strings.TrimSpace(gid) != "" {
+		exportURL += "&gid=" + gid
+	}
+
+	resp, err := http.Get(exportURL) //nolint:noctx
+	if err != nil {
+		return nil, fmt.Errorf("download xlsx: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("download xlsx: unexpected status %s", resp.Status)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read xlsx body: %w", err)
+	}
+
+	tmp, err := os.CreateTemp("", "gsheets-*.xlsx")
+	if err != nil {
+		return nil, fmt.Errorf("create temp file: %w", err)
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return nil, fmt.Errorf("write temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return nil, fmt.Errorf("close temp file: %w", err)
+	}
+
+	xl, err := excelize.OpenFile(tmp.Name())
+	if err != nil {
+		return nil, fmt.Errorf("open xlsx: %w", err)
+	}
+	defer xl.Close()
+
+	return xlsxscan.FindWfpsimKeys(xl)
 }
 
 func parseConsByChar(configFile string, aliasResolver *charalias.Resolver) (map[string]int, error) {

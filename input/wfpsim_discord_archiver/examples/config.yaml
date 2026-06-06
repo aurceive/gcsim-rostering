@@ -38,9 +38,10 @@ sheet:
   name: wfpsim
 
 run:
-  # channelHistory (default) | guildSearch (experimental; may be blocked for bot tokens)
+  # channelHistory (default) | guildSearch (experimental; may be blocked for bot tokens) | googleSheets
   mode: channelHistory
   # mode: guildSearch
+  # mode: googleSheets
   sinceDays: 3
   # stateFile: work/wfpsim_discord_archiver/state.json
   # Ignore channel/guild checkpoints (scan the whole sinceDays window),
@@ -48,3 +49,11 @@ run:
   ignoreStateCheckpoint: false
   dryRun: true
   # dryRun: false
+
+  # googleSheets mode: reads wfpsim share links from a public Google Sheets document.
+  # The document must be publicly accessible (no auth required).
+  # discord.token is NOT required for this mode.
+  #
+  # googleSheets:
+  #   id: ________________________________________________   # spreadsheet ID from URL
+  #   gid: "_________"  # optional: specific sheet tab (gid from URL); omit to scan all sheets

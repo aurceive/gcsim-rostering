@@ -36,13 +36,19 @@ type SheetConfig struct {
 	Name string `yaml:"name"`
 }
 
+type GoogleSheetsSourceConfig struct {
+	ID  string `yaml:"id"`
+	GID string `yaml:"gid"` // optional; if empty — downloads the whole file
+}
+
 type RunConfig struct {
 	StateFile string `yaml:"stateFile"`
 	SinceDays int    `yaml:"sinceDays"`
 	Mode      string `yaml:"mode"`
 	// If true, ignores state checkpoints (lastSearchMessageIds for guildSearch and per-channel lastSeenMessageId for channelHistory).
-	IgnoreStateCheckpoint bool `yaml:"ignoreStateCheckpoint"`
-	DryRun                bool `yaml:"dryRun"`
+	IgnoreStateCheckpoint bool                     `yaml:"ignoreStateCheckpoint"`
+	DryRun                bool                     `yaml:"dryRun"`
+	GoogleSheets          GoogleSheetsSourceConfig `yaml:"googleSheets"`
 }
 
 type FileConfig struct {
@@ -82,24 +88,27 @@ func Load(configPath string) (Config, error) {
 		cfg.Run.Mode = "channelHistory"
 	}
 
-	if strings.TrimSpace(cfg.Discord.Token) == "" {
-		return Config{}, errors.New("missing discord.token")
-	}
-	cfg.Discord.ServerIDs = normalizeIDs(cfg.Discord.ServerIDs...)
-
 	switch cfg.Run.Mode {
-	case "channelHistory":
-		if len(cfg.Discord.ChannelIDs) == 0 {
-			return Config{}, errors.New("missing discord.channelIds")
+	case "channelHistory", "guildSearch":
+		if strings.TrimSpace(cfg.Discord.Token) == "" {
+			return Config{}, errors.New("missing discord.token")
 		}
-		// discord.serverIds is optional here because channelIds are globally unique.
-	case "guildSearch":
-		if len(cfg.Discord.ServerIDs) == 0 {
-			return Config{}, errors.New("missing discord.serverIds")
+		cfg.Discord.ServerIDs = normalizeIDs(cfg.Discord.ServerIDs...)
+		if cfg.Run.Mode == "channelHistory" {
+			if len(cfg.Discord.ChannelIDs) == 0 {
+				return Config{}, errors.New("missing discord.channelIds")
+			}
+		} else {
+			if len(cfg.Discord.ServerIDs) == 0 {
+				return Config{}, errors.New("missing discord.serverIds")
+			}
 		}
-		// channelIds optional (can be used to narrow search later)
+	case "googleSheets":
+		if strings.TrimSpace(cfg.Run.GoogleSheets.ID) == "" {
+			return Config{}, errors.New("missing run.googleSheets.id")
+		}
 	default:
-		return Config{}, fmt.Errorf("invalid run.mode: %s (expected channelHistory|guildSearch)", cfg.Run.Mode)
+		return Config{}, fmt.Errorf("invalid run.mode: %s (expected channelHistory|guildSearch|googleSheets)", cfg.Run.Mode)
 	}
 
 	if cfg.Run.SinceDays <= 0 {

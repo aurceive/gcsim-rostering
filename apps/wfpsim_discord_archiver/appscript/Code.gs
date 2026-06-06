@@ -452,13 +452,20 @@ function refreshDateSheet_(ss, mainSh) {
     ]);
   }
 
-  // Sort by DiscordMessageCreatedAt DESC; empty/zero timestamps last.
+  // Sort by effective timestamp DESC; empty/zero timestamps last.
+  // Effective timestamp = DiscordMessageCreatedAt if present, otherwise FetchedAt.
+  // DiscordMessageCreatedAt is at index 0, FetchedAt is at index 9.
+  function effectiveTs_(row) {
+    var v = row[0];
+    var s = (v instanceof Date) ? v.toISOString() : safeStr_(v);
+    if (s !== "") return s;
+    var f = row[9];
+    return (f instanceof Date) ? f.toISOString() : safeStr_(f);
+  }
+
   rows.sort(function (a, b) {
-    var va = a[0];
-    var vb = b[0];
-    // Convert Date objects to ISO strings for consistent comparison.
-    var da = (va instanceof Date) ? va.toISOString() : safeStr_(va);
-    var db = (vb instanceof Date) ? vb.toISOString() : safeStr_(vb);
+    var da = effectiveTs_(a);
+    var db = effectiveTs_(b);
     if (da === "" && db !== "") return 1;
     if (db === "" && da !== "") return -1;
     if (da !== db) return da > db ? -1 : 1; // DESC
