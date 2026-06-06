@@ -49,6 +49,7 @@ type RunConfig struct {
 	IgnoreStateCheckpoint bool                     `yaml:"ignoreStateCheckpoint"`
 	DryRun                bool                     `yaml:"dryRun"`
 	GoogleSheets          GoogleSheetsSourceConfig `yaml:"googleSheets"`
+	URLs                  []string                 `yaml:"urls"` // urlList mode: wfpsim share URLs or keys
 }
 
 type FileConfig struct {
@@ -107,8 +108,12 @@ func Load(configPath string) (Config, error) {
 		if strings.TrimSpace(cfg.Run.GoogleSheets.ID) == "" {
 			return Config{}, errors.New("missing run.googleSheets.id")
 		}
+	case "urlList":
+		if len(cfg.Run.URLs) == 0 {
+			return Config{}, errors.New("missing run.urls (required for urlList mode)")
+		}
 	default:
-		return Config{}, fmt.Errorf("invalid run.mode: %s (expected channelHistory|guildSearch|googleSheets)", cfg.Run.Mode)
+		return Config{}, fmt.Errorf("invalid run.mode: %s (expected channelHistory|guildSearch|googleSheets|urlList)", cfg.Run.Mode)
 	}
 
 	if cfg.Run.SinceDays <= 0 {

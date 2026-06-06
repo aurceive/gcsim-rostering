@@ -38,10 +38,11 @@ sheet:
   name: wfpsim
 
 run:
-  # channelHistory (default) | guildSearch (experimental; may be blocked for bot tokens) | googleSheets
+  # channelHistory (default) | guildSearch (experimental; may be blocked for bot tokens) | googleSheets | urlList
   mode: channelHistory
   # mode: guildSearch
   # mode: googleSheets
+  # mode: urlList
   sinceDays: 3
   # stateFile: work/wfpsim_discord_archiver/state.json
   # Ignore channel/guild checkpoints (scan the whole sinceDays window),
@@ -57,3 +58,10 @@ run:
   # googleSheets:
   #   id: ________________________________________________   # spreadsheet ID from URL
   #   gid: "_________"  # optional: specific sheet tab (gid from URL); omit to scan all sheets
+
+  # urlList mode: explicitly list wfpsim share URLs (or bare UUIDs) to archive.
+  # discord.token is NOT required for this mode.
+  #
+  # urls:
+  #   - https://wfpsim.com/sh/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+  #   - https://wfpsim.com/sh/yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy

@@ -102,6 +102,46 @@ func Run(ctx context.Context, cfg config.Config) error {
 	seenKeys := map[string]struct{}{}
 	channelGuildID := map[string]string{}
 
+	if cfg.Run.Mode == "urlList" {
+		fmt.Printf("Using run.mode=urlList (%d URLs)\n", len(cfg.Run.URLs))
+		keys := make([]string, 0, len(cfg.Run.URLs))
+		for _, u := range cfg.Run.URLs {
+			u = strings.TrimSpace(u)
+			if u == "" {
+				continue
+			}
+			if k, ok := shareurl.ExtractKeyFromURL(u); ok {
+				keys = append(keys, k)
+			} else {
+				// Treat bare UUID as key directly.
+				keys = append(keys, strings.ToLower(u))
+			}
+		}
+		fmt.Printf("Parsed %d wfpsim keys from urls\n", len(keys))
+
+		for _, key := range keys {
+			if _, ok := st.ProcessedKeys[key]; ok {
+				continue
+			}
+			fmt.Printf("Fetching share for key %s...\n", key)
+			share, err := wc.FetchShare(ctx, key)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "wfpsim fetch failed key=%s err=%v\n", key, err)
+				continue
+			}
+			row, err := buildRowFromKey(key, share, aliasResolver)
+			if err != nil {
+				return err
+			}
+			if err := writer.AppendRow(ctx, row, key, ""); err != nil {
+				return err
+			}
+			totalNewKeys++
+			st.ProcessedKeys[key] = time.Now()
+		}
+		goto finalize
+	}
+
 	if cfg.Run.Mode == "googleSheets" {
 		fmt.Printf("Using run.mode=googleSheets (source sheet id=%s gid=%s)\n",
 			cfg.Run.GoogleSheets.ID, cfg.Run.GoogleSheets.GID)
