@@ -32,7 +32,10 @@ type EngineData struct {
 func LoadData(engineRoot string) (*EngineData, error) {
 	dataDir := filepath.Join(engineRoot, "ui", "packages", "ui", "src", "Data")
 
-	charsPath := filepath.Join(dataDir, "char_data.generated.json")
+	charsPath, err := resolveCharacterDataPath(dataDir)
+	if err != nil {
+		return nil, err
+	}
 	weaponsPath := filepath.Join(dataDir, "weapon_data.generated.json")
 	artifactsPath := filepath.Join(dataDir, "artifact_data.generated.json")
 	mainStatsPath := filepath.Join(dataDir, "artifact_main_gen.json")
@@ -60,6 +63,16 @@ func LoadData(engineRoot string) (*EngineData, error) {
 		ArtifactTextMapToKey:  artifactTextMapToKey,
 		ArtifactMainStatsData: artifactMain,
 	}, nil
+}
+
+func resolveCharacterDataPath(dataDir string) (string, error) {
+	for _, name := range []string{"char_data.generated.json", "character.dm.json"} {
+		path := filepath.Join(dataDir, name)
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("missing character data: %s or %s", filepath.Join(dataDir, "char_data.generated.json"), filepath.Join(dataDir, "character.dm.json"))
 }
 
 func loadCharData(path string) (map[string]CharData, error) {

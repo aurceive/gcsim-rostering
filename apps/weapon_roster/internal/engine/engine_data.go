@@ -30,8 +30,11 @@ func LoadData(engineRoot string) (map[string]string, domain.WeaponData, domain.C
 		return nil, domain.WeaponData{}, domain.CharacterData{}, err
 	}
 
-	// Read char_data.generated.json for character data
-	charBytes, err := os.ReadFile(filepath.Join(engineRoot, "ui", "packages", "ui", "src", "Data", "char_data.generated.json"))
+	charPath, err := resolveCharacterDataPath(filepath.Join(engineRoot, "ui", "packages", "ui", "src", "Data"))
+	if err != nil {
+		return nil, domain.WeaponData{}, domain.CharacterData{}, err
+	}
+	charBytes, err := os.ReadFile(charPath)
 	if err != nil {
 		return nil, domain.WeaponData{}, domain.CharacterData{}, err
 	}
@@ -50,4 +53,14 @@ func LoadData(engineRoot string) (map[string]string, domain.WeaponData, domain.C
 	}
 
 	return weaponNames, weaponData, charData, nil
+}
+
+func resolveCharacterDataPath(dataDir string) (string, error) {
+	for _, name := range []string{"char_data.generated.json", "character.dm.json"} {
+		path := filepath.Join(dataDir, name)
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("missing character data: %s or %s", filepath.Join(dataDir, "char_data.generated.json"), filepath.Join(dataDir, "character.dm.json"))
 }
