@@ -6,8 +6,10 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -31,16 +33,8 @@ func LoadData(engineRoot string) (map[string]string, domain.WeaponData, domain.C
 		return nil, domain.WeaponData{}, domain.CharacterData{}, err
 	}
 
-	charPath, err := resolveCharacterDataPath(filepath.Join(engineRoot, "ui", "packages", "ui", "src", "Data"))
+	charData, err := loadRegisteredCharacterData(engineRoot)
 	if err != nil {
-		return nil, domain.WeaponData{}, domain.CharacterData{}, err
-	}
-	charBytes, err := os.ReadFile(charPath)
-	if err != nil {
-		return nil, domain.WeaponData{}, domain.CharacterData{}, err
-	}
-	var charData domain.CharacterData
-	if err := json.Unmarshal(charBytes, &charData); err != nil {
 		return nil, domain.WeaponData{}, domain.CharacterData{}, err
 	}
 
@@ -63,6 +57,10 @@ func LoadData(engineRoot string) (map[string]string, domain.WeaponData, domain.C
 }
 
 type weaponPackageConfig struct {
+	Key string `yaml:"key"`
+}
+
+type characterPackageConfig struct {
 	Key string `yaml:"key"`
 }
 
@@ -181,6 +179,111 @@ func parseWeaponTextproto(path string) (int, string, error) {
 	return rarity, weaponClass, nil
 }
 
+func loadRegisteredCharacterData(engineRoot string) (domain.CharacterData, error) {
+	root := filepath.Join(engineRoot, "internal", "characters")
+	data := domain.CharacterData{Data: make(map[string]domain.Character)}
+	if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || filepath.Base(path) != "config.yml" {
+			return nil
+		}
+		dir := filepath.Dir(path)
+		if _, err := os.Stat(filepath.Join(dir, "data_gen.textproto")); err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		char, err := loadCharacterPackage(dir)
+		if err != nil {
+			return err
+		}
+		if _, exists := data.Data[char.Key]; exists {
+			return fmt.Errorf("duplicate registered character key %q", char.Key)
+		}
+		data.Data[char.Key] = char
+		return nil
+	}); err != nil {
+		return domain.CharacterData{}, err
+	}
+	addCharacterAliases(data.Data)
+	if len(data.Data) == 0 {
+		return domain.CharacterData{}, fmt.Errorf("no registered character packages found in %q", root)
+	}
+	return data, nil
+}
+
+func loadCharacterPackage(dir string) (domain.Character, error) {
+	configPath := filepath.Join(dir, "config.yml")
+	configBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		return domain.Character{}, fmt.Errorf("read registered character config %q: %w", configPath, err)
+	}
+	var config characterPackageConfig
+	if err := yaml.Unmarshal(configBytes, &config); err != nil {
+		return domain.Character{}, fmt.Errorf("parse registered character config %q: %w", configPath, err)
+	}
+	key := strings.TrimSpace(config.Key)
+	if key == "" {
+		return domain.Character{}, fmt.Errorf("registered character config %q has an empty key", configPath)
+	}
+	weaponClass, err := parseCharacterTextproto(filepath.Join(dir, "data_gen.textproto"))
+	if err != nil {
+		return domain.Character{}, err
+	}
+	return domain.Character{Key: key, WeaponClass: weaponClass}, nil
+}
+
+func parseCharacterTextproto(path string) (string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read registered character data %q: %w", path, err)
+	}
+	var weaponClass string
+	for _, line := range strings.Split(string(b), "\n") {
+		field, value, ok := strings.Cut(strings.TrimSpace(line), ":")
+		if !ok {
+			continue
+		}
+		switch strings.TrimSpace(field) {
+		case "weapon_class":
+			weaponClass = strings.TrimSpace(value)
+		}
+	}
+	if weaponClass == "" {
+		return "", fmt.Errorf("registered character data %q is missing weapon_class", path)
+	}
+	return weaponClass, nil
+}
+
+func addCharacterAliases(data map[string]domain.Character) {
+	keys := make([]string, 0, len(data))
+	for key := range data {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if !strings.HasPrefix(key, "aether") && !strings.HasPrefix(key, "lumine") {
+			continue
+		}
+		var suffix string
+		switch {
+		case strings.HasPrefix(key, "aether"):
+			suffix = strings.TrimPrefix(key, "aether")
+		case strings.HasPrefix(key, "lumine"):
+			suffix = strings.TrimPrefix(key, "lumine")
+		}
+		if suffix == "" {
+			continue
+		}
+		for _, alias := range []string{"aether-" + suffix, "lumine-" + suffix, "traveler" + suffix, "traveler-" + suffix} {
+			data[alias] = data[key]
+		}
+	}
+}
+
 func weaponClassToProto(class string) (string, bool) {
 	classes := map[string]string{
 		"bow":      "WEAPON_BOW",
@@ -191,14 +294,4 @@ func weaponClassToProto(class string) (string, bool) {
 	}
 	value, ok := classes[class]
 	return value, ok
-}
-
-func resolveCharacterDataPath(dataDir string) (string, error) {
-	for _, name := range []string{"char_data.generated.json", "character.dm.json"} {
-		path := filepath.Join(dataDir, name)
-		if _, err := os.Stat(path); err == nil {
-			return path, nil
-		}
-	}
-	return "", fmt.Errorf("missing character data: %s or %s", filepath.Join(dataDir, "char_data.generated.json"), filepath.Join(dataDir, "character.dm.json"))
 }
