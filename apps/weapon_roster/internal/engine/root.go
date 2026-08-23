@@ -12,7 +12,7 @@ import (
 func ResolveRoot(appRoot string, cfg domain.Config) (string, error) {
 	if strings.TrimSpace(cfg.EnginePath) != "" {
 		root := filepath.Clean(cfg.EnginePath)
-		probe := filepath.Join(root, "ui", "packages", "ui", "src", "Data", "weapon_data.generated.json")
+		probe := filepath.Join(root, "pkg", "simulation", "imports.go")
 		if _, err := os.Stat(probe); err != nil {
 			return "", fmt.Errorf("engine_path=%q does not look like a gcsim repo (missing %s)", root, probe)
 		}
@@ -23,7 +23,7 @@ func ResolveRoot(appRoot string, cfg domain.Config) (string, error) {
 		engine = "gcsim"
 	}
 	root := filepath.Join(appRoot, "engines", engine)
-	probe := filepath.Join(root, "ui", "packages", "ui", "src", "Data", "weapon_data.generated.json")
+	probe := filepath.Join(root, "pkg", "simulation", "imports.go")
 	if _, err := os.Stat(probe); err != nil {
 		return "", fmt.Errorf("engine=%q not found or invalid at %q (missing %s)", engine, root, probe)
 	}
