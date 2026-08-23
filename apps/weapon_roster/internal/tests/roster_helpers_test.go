@@ -92,8 +92,11 @@ func TestIsAvailableWeapon(t *testing.T) {
 	}
 
 	w5 := domain.Weapon{Key: "w5", Rarity: 5}
-	if got := weapons.IsAvailableWeapon(w5, []string{"Стандартная молитва"}); got {
-		t.Fatalf("expected 5* to be unavailable")
+	if got := weapons.IsAvailableWeapon(w5, []string{"Стандартная молитва"}); !got {
+		t.Fatalf("expected 5* with a non-limited source to be available")
+	}
+	if got := weapons.IsAvailableWeapon(w5, []string{"БП"}); got {
+		t.Fatalf("expected 5* with only limited sources to be unavailable")
 	}
 }
 

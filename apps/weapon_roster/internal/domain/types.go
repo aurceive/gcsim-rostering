@@ -6,6 +6,46 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type WeaponSelection struct {
+	Items  []string
+	Append bool
+}
+
+func (w *WeaponSelection) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.SequenceNode:
+		var items []string
+		if err := value.Decode(&items); err != nil {
+			return err
+		}
+		w.Items = items
+		w.Append = false
+		return nil
+	case yaml.MappingNode:
+		var raw struct {
+			Append bool     `yaml:"append"`
+			Items  []string `yaml:"items"`
+			List   []string `yaml:"list"`
+			Value  []string `yaml:"value"`
+		}
+		if err := value.Decode(&raw); err != nil {
+			return err
+		}
+		items := raw.Items
+		if len(items) == 0 {
+			items = raw.List
+		}
+		if len(items) == 0 {
+			items = raw.Value
+		}
+		w.Items = items
+		w.Append = raw.Append
+		return nil
+	default:
+		return fmt.Errorf("config: weapons must be a list or a map with append/items/list/value")
+	}
+}
+
 type Config struct {
 	Engine     string `yaml:"engine"`
 	EnginePath string `yaml:"engine_path"`
@@ -16,8 +56,13 @@ type Config struct {
 	// - a weapon key (e.g. "skywardharp"), or
 	// - an exact Russian weapon name (full match, e.g. "Небесное крыло").
 	//
-	// When empty, weapon_roster computes all weapons matching the character's weapon class and rarity filter.
-	Weapons []string `yaml:"weapons"`
+	// By default, when non-empty, weapon_roster computes only this set of weapons instead of the full class+rarity list.
+	// Set `weapons.append: true` to add this list to the default base set instead of replacing it.
+	Weapons WeaponSelection `yaml:"weapons"`
+	// AvailableWeapon appends one manually selected weapon to the current weapon set,
+	// and it also becomes the 100% reference in exported result percentages.
+	// It accepts a single name and an optional single refine at the end, like "skywardharp 3".
+	AvailableWeapon string `yaml:"available_weapon"`
 	// BaseTablePath optionally points to an existing XLSX table (usually produced by weapon_roster)
 	// whose data should be merged into the result table.
 	BaseTablePath string `yaml:"base_table_path"`
@@ -54,6 +99,7 @@ func (c *Config) UnmarshalYAML(value *yaml.Node) error {
 			"char":                       {},
 			"roster_name":                {},
 			"weapons":                    {},
+			"available_weapon":           {},
 			"base_table_path":            {},
 			"output_table_path":          {},
 			"trust_existing_results":     {},

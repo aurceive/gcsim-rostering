@@ -11,8 +11,9 @@ import (
 // It may append stubs to weaponSourcesPath. If required data is missing or empty,
 // it prints instructions and returns false to indicate the caller should stop.
 func EnsureSourcesReady(weapons []string, weaponData domain.WeaponData, weaponNames map[string]string, weaponSources map[string][]string, weaponSourcesPath string) (bool, error) {
-	// В weapon_sources_ru.yaml поддерживаются только 4* оружия.
-	// Поэтому автодобавление и проверка на пустой список делаются только для 4*.
+	// 5* не требуют записи в weapon_sources_ru.yaml; они считаются доступными только при наличии
+	// явной записи и неограниченного источника. Поэтому для 5* автогенерация заглушек и проверка
+	// на пустой список отключены.
 	var missing []string
 	var empty []string
 	stubs := make([]string, 0)
@@ -20,6 +21,9 @@ func EnsureSourcesReady(weapons []string, weaponData domain.WeaponData, weaponNa
 		wd, ok := weaponData.Data[w]
 		if !ok {
 			return false, fmt.Errorf("weapon %s not found in weapon data", w)
+		}
+		if wd.Rarity == 5 {
+			continue
 		}
 		if wd.Rarity != 4 {
 			continue

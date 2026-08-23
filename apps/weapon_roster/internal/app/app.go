@@ -384,17 +384,17 @@ func run(appRoot string, opts Options) error {
 	// By default: all weapons matching class + rarity filter.
 	weaponsToRun := weapons.SortByRarityDescThenKey(weaponsToConsider, weaponData)
 	weaponRequestsByKey := make(map[string]*weaponRequest)
-	if len(cfg.Weapons) > 0 {
-		requestedOrder := make([]string, 0, len(cfg.Weapons))
-		requestedByName := make(map[string]*weaponRequest, len(cfg.Weapons))
-		for _, raw := range cfg.Weapons {
+	resolveRequestedWeapons := func(rawItems []string, scopeName string) ([]string, error) {
+		requestedOrder := make([]string, 0, len(rawItems))
+		requestedByName := make(map[string]*weaponRequest, len(rawItems))
+		for _, raw := range rawItems {
 			s := strings.TrimSpace(raw)
 			if s == "" {
 				continue
 			}
 			name, refines, hasRefines, err := parseWeaponAndRefines(s)
 			if err != nil {
-				return fmt.Errorf("weapons: %w", err)
+				return nil, fmt.Errorf("%s: %w", scopeName, err)
 			}
 			req := requestedByName[name]
 			if req == nil {
@@ -411,7 +411,6 @@ func run(appRoot string, opts Options) error {
 			}
 		}
 
-		// Build reverse map: exact Russian name -> weapon key.
 		nameToKey := make(map[string]string, len(weaponNames))
 		ambiguous := make(map[string]struct{})
 		for k, ruName := range weaponNames {
@@ -436,11 +435,10 @@ func run(appRoot string, opts Options) error {
 			if _, ok := weaponData.Data[token]; ok {
 				weaponKey = token
 			} else if _, ok := ambiguous[token]; ok {
-				return fmt.Errorf("weapons: ambiguous Russian name (matches multiple keys): %q", token)
+				return nil, fmt.Errorf("%s: ambiguous Russian name (matches multiple keys): %q", scopeName, token)
 			} else if k, ok := nameToKey[token]; ok {
 				weaponKey = k
 			}
-
 			if weaponKey == "" {
 				unknown = append(unknown, token)
 				continue
@@ -454,10 +452,9 @@ func run(appRoot string, opts Options) error {
 				wrongClass = append(wrongClass, weaponKey)
 				continue
 			}
-
 			req := requestedByName[token]
 			if req == nil {
-				return fmt.Errorf("weapons: internal error, missing request for %q", token)
+				return nil, fmt.Errorf("%s: internal error, missing request for %q", scopeName, token)
 			}
 			if existing, ok := weaponRequestsByKey[weaponKey]; ok {
 				existing.includeDefault = existing.includeDefault || req.includeDefault
@@ -478,13 +475,77 @@ func run(appRoot string, opts Options) error {
 			resolved = append(resolved, weaponKey)
 		}
 		if len(unknown) > 0 {
-			return fmt.Errorf("weapons: unknown weapon keys or Russian names (strict full match): %s", strings.Join(unknown, ", "))
+			return nil, fmt.Errorf("%s: unknown weapon keys or Russian names (strict full match): %s", scopeName, strings.Join(unknown, ", "))
 		}
 		if len(wrongClass) > 0 {
-			return fmt.Errorf("weapons: weapons not compatible with %s (class=%s): %s", char, weaponClass, strings.Join(wrongClass, ", "))
+			return nil, fmt.Errorf("%s: weapons not compatible with %s (class=%s): %s", scopeName, char, weaponClass, strings.Join(wrongClass, ", "))
 		}
-		weaponsToRun = resolved
-		fmt.Printf("weapons: running %d selected weapons\n", len(weaponsToRun))
+		return resolved, nil
+	}
+	manualWeaponKey := ""
+	manualWeaponRefine := 0
+	if cfg.Weapons.Items != nil && len(cfg.Weapons.Items) > 0 {
+		resolved, err := resolveRequestedWeapons(cfg.Weapons.Items, "weapons")
+		if err != nil {
+			return err
+		}
+		selected := make(map[string]struct{}, len(resolved))
+		for _, key := range resolved {
+			selected[key] = struct{}{}
+		}
+		if cfg.Weapons.Append {
+			seen := make(map[string]struct{}, len(weaponsToRun))
+			for _, key := range weaponsToRun {
+				seen[key] = struct{}{}
+			}
+			for _, key := range resolved {
+				if _, ok := seen[key]; ok {
+					continue
+				}
+				seen[key] = struct{}{}
+				weaponsToRun = append(weaponsToRun, key)
+			}
+			fmt.Printf("weapons: appended %d selected weapons\n", len(resolved))
+		} else {
+			weaponsToRun = nil
+			for _, key := range weapons.SortByRarityDescThenKey(weaponsToConsider, weaponData) {
+				if _, ok := selected[key]; ok {
+					weaponsToRun = append(weaponsToRun, key)
+				}
+			}
+			fmt.Printf("weapons: running %d selected weapons\n", len(weaponsToRun))
+		}
+	}
+	if strings.TrimSpace(cfg.AvailableWeapon) != "" {
+		_, refines, hasRefines, err := parseWeaponAndRefines(cfg.AvailableWeapon)
+		if err != nil {
+			return fmt.Errorf("available_weapon: %w", err)
+		}
+		if len(refines) > 1 {
+			return fmt.Errorf("available_weapon: expected at most one refine, got %q", cfg.AvailableWeapon)
+		}
+		resolved, err := resolveRequestedWeapons([]string{cfg.AvailableWeapon}, "available_weapon")
+		if err != nil {
+			return err
+		}
+		if len(resolved) > 0 {
+			manualWeaponKey = resolved[0]
+			if hasRefines {
+				manualWeaponRefine = refines[0]
+			}
+		}
+		seen := make(map[string]struct{}, len(weaponsToRun))
+		for _, key := range weaponsToRun {
+			seen[key] = struct{}{}
+		}
+		for _, key := range resolved {
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			weaponsToRun = append(weaponsToRun, key)
+		}
+		fmt.Printf("available_weapon: added manual override for %q\n", strings.TrimSpace(cfg.AvailableWeapon))
 	}
 
 	// Generate main stat combinations
@@ -760,7 +821,7 @@ func run(appRoot string, opts Options) error {
 	}
 
 	// Export to xlsx (no console result output)
-	xlsxPath, err := output.ExportResultsXLSX(appRoot, char, charOrder, cfg.RosterName, target, finalVariantOrder, finalResultsByVariant, weaponData, weaponNames, weaponSources, outputPath)
+	xlsxPath, err := output.ExportResultsXLSX(appRoot, char, charOrder, cfg.RosterName, target, finalVariantOrder, finalResultsByVariant, weaponData, weaponNames, weaponSources, outputPath, manualWeaponKey, manualWeaponRefine)
 	if err != nil {
 		return err
 	}

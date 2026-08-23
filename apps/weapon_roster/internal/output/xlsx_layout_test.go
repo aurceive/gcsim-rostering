@@ -28,7 +28,7 @@ func TestExportResultsXLSX_NewLayoutUsesIndependentVariantBlocks(t *testing.T) {
 	}
 
 	outPath := filepath.Join(tmpDir, "results.xlsx")
-	filename, err := ExportResultsXLSX(tmpDir, "raiden", []string{"raiden", "furina", "bennett", "xiangling"}, "test", domain.TargetTeamDps, []string{"a", "b"}, resultsByVariant, weaponData, weaponNames, weaponSources, outPath)
+	filename, err := ExportResultsXLSX(tmpDir, "raiden", []string{"raiden", "furina", "bennett", "xiangling"}, "test", domain.TargetTeamDps, []string{"a", "b"}, resultsByVariant, weaponData, weaponNames, weaponSources, outPath, "", 0)
 	if err != nil {
 		t.Fatalf("export failed: %v", err)
 	}
@@ -102,6 +102,23 @@ func TestExportResultsXLSX_NewLayoutUsesIndependentVariantBlocks(t *testing.T) {
 	}
 	if !hasImportedConfig(imported["b"], "w1", "cfg-b-w1") {
 		t.Fatalf("variant b config was not imported correctly: %#v", imported["b"])
+	}
+}
+
+func TestBestAvailableBenchmarks_UsesExactReferenceRefine(t *testing.T) {
+	results := []domain.Result{
+		{Weapon: "exaiphanesblade", Refine: 3, TeamDps: 300, CharDps: 200},
+		{Weapon: "exaiphanesblade", Refine: 5, TeamDps: 500, CharDps: 350},
+		{Weapon: "other", Refine: 1, TeamDps: 400, CharDps: 220},
+	}
+	weaponData := domain.WeaponData{Data: map[string]domain.Weapon{
+		"exaiphanesblade": {Key: "exaiphanesblade", Rarity: 5},
+		"other":           {Key: "other", Rarity: 4},
+	}}
+	weaponSources := map[string][]string{"exaiphanesblade": {"Ковка"}, "other": {"Ковка"}}
+	teamBenchmark, charBenchmark := bestAvailableBenchmarks(results, weaponData, weaponSources, "exaiphanesblade", 3)
+	if teamBenchmark != 300 || charBenchmark != 200 {
+		t.Fatalf("expected exact refine benchmark for exaiphanesblade R3 to be 300/200, got %d/%d", teamBenchmark, charBenchmark)
 	}
 }
 

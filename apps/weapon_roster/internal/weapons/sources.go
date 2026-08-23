@@ -29,7 +29,7 @@ var limitedWeaponSources = map[string]struct{}{
 	"Магазин Паймон":              {},
 }
 
-func hasAnyNonLimited4StarSource(sources []string) bool {
+func hasAnyNonLimitedSource(sources []string) bool {
 	// "Не лимитные" источники: любые, кроме (БП, Ивентовая оружейная молитва, Магазин Паймон).
 	for _, s := range sources {
 		if _, ok := limitedWeaponSources[s]; !ok {
@@ -42,12 +42,16 @@ func hasAnyNonLimited4StarSource(sources []string) bool {
 // IsAvailableWeapon возвращает true, если оружие считается "доступным" для сравнения:
 // - все 3*
 // - 4* только если у него есть любой источник кроме (БП, Ивентовая оружейная молитва, Магазин Паймон)
+// - 5* считаются доступными только при наличии явной записи в YAML и неограниченного источника
 func IsAvailableWeapon(w domain.Weapon, sources []string) bool {
 	if w.Rarity == 3 {
 		return true
 	}
 	if w.Rarity == 4 {
-		return hasAnyNonLimited4StarSource(sources)
+		return hasAnyNonLimitedSource(sources)
+	}
+	if w.Rarity == 5 {
+		return len(sources) > 0 && hasAnyNonLimitedSource(sources)
 	}
 	return false
 }
@@ -110,7 +114,7 @@ func RefinesForWeapon(w domain.Weapon, sources []string) []int {
 	if w.Rarity == 4 {
 		// По умолчанию: r1 и r5, но если есть любой источник кроме
 		// (БП, Ивентовая оружейная молитва, Магазин Паймон) -> только r5.
-		if hasAnyNonLimited4StarSource(sources) {
+		if hasAnyNonLimitedSource(sources) {
 			return []int{5}
 		}
 		return []int{1, 5}

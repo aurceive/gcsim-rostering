@@ -35,7 +35,7 @@ func colName(n int) string {
 	return out
 }
 
-func bestAvailableBenchmarks(results []domain.Result, weaponData domain.WeaponData, weaponSources map[string][]string) (bestAvailableTeamDps int, bestAvailableCharDps int) {
+func bestAvailableBenchmarks(results []domain.Result, weaponData domain.WeaponData, weaponSources map[string][]string, referenceWeapon string, referenceRefine int) (bestAvailableTeamDps int, bestAvailableCharDps int) {
 	bestOverallTeamDps := 0
 	bestOverallCharDps := 0
 	bestAvailableTeamDps = 0
@@ -47,7 +47,29 @@ func bestAvailableBenchmarks(results []domain.Result, weaponData domain.WeaponDa
 		if r.CharDps > bestOverallCharDps {
 			bestOverallCharDps = r.CharDps
 		}
+	}
 
+	if strings.TrimSpace(referenceWeapon) != "" {
+		for _, r := range results {
+			if r.Weapon != referenceWeapon {
+				continue
+			}
+			if referenceRefine > 0 && r.Refine != referenceRefine {
+				continue
+			}
+			if r.TeamDps > bestAvailableTeamDps {
+				bestAvailableTeamDps = r.TeamDps
+			}
+			if r.CharDps > bestAvailableCharDps {
+				bestAvailableCharDps = r.CharDps
+			}
+		}
+		if bestAvailableTeamDps > 0 || bestAvailableCharDps > 0 {
+			return bestAvailableTeamDps, bestAvailableCharDps
+		}
+	}
+
+	for _, r := range results {
 		wd, ok := weaponData.Data[r.Weapon]
 		if !ok {
 			continue
@@ -138,7 +160,7 @@ func sortVariantResults(results []domain.Result, target domain.Target) []domain.
 	return out
 }
 
-func ExportResultsXLSX(appRoot string, char string, partyMembers []string, rosterName string, target domain.Target, variantOrder []string, resultsByVariant map[string][]domain.Result, weaponData domain.WeaponData, weaponNames map[string]string, weaponSources map[string][]string, outputPath string) (string, error) {
+func ExportResultsXLSX(appRoot string, char string, partyMembers []string, rosterName string, target domain.Target, variantOrder []string, resultsByVariant map[string][]domain.Result, weaponData domain.WeaponData, weaponNames map[string]string, weaponSources map[string][]string, outputPath string, referenceWeapon string, referenceRefine int) (string, error) {
 	if len(variantOrder) == 0 {
 		variantOrder = []string{"default"}
 	}
@@ -250,7 +272,7 @@ func ExportResultsXLSX(appRoot string, char string, partyMembers []string, roste
 	bestAvailTeam := make(map[string]int, len(variantOrder))
 	bestAvailChar := make(map[string]int, len(variantOrder))
 	for _, v := range variantOrder {
-		bt, bc := bestAvailableBenchmarks(resultsByVariant[v], weaponData, weaponSources)
+		bt, bc := bestAvailableBenchmarks(resultsByVariant[v], weaponData, weaponSources, referenceWeapon, referenceRefine)
 		bestAvailTeam[v] = bt
 		bestAvailChar[v] = bc
 	}
