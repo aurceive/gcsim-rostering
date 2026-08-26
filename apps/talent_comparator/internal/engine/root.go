@@ -9,23 +9,35 @@ import (
 	"github.com/genshinsim/gcsim/apps/talent_comparator/internal/domain"
 )
 
-func ResolveRoot(appRoot string, cfg domain.Config) (string, error) {
+type EngineContext struct {
+	Root          string
+	CharacterData CharacterData
+}
+
+func ResolveRoot(appRoot string, cfg domain.Config) (EngineContext, error) {
+	var root string
 	if strings.TrimSpace(cfg.EnginePath) != "" {
-		root := filepath.Clean(cfg.EnginePath)
+		root = filepath.Clean(cfg.EnginePath)
 		if err := requireCharacterData(root); err != nil {
-			return "", fmt.Errorf("engine_path=%q does not look like a gcsim repo (%w)", root, err)
+			return EngineContext{}, fmt.Errorf("engine_path=%q does not look like a gcsim repo (%w)", root, err)
 		}
-		return root, nil
+	} else {
+		engine := strings.TrimSpace(cfg.Engine)
+		if engine == "" {
+			engine = "gcsim"
+		}
+		root = filepath.Join(appRoot, "engines", engine)
+		if err := requireCharacterData(root); err != nil {
+			return EngineContext{}, fmt.Errorf("engine=%q not found or invalid at %q (%w)", engine, root, err)
+		}
 	}
-	engine := strings.TrimSpace(cfg.Engine)
-	if engine == "" {
-		engine = "gcsim"
+
+	charData, err := LoadRegisteredCharacterData(root)
+	if err != nil {
+		return EngineContext{}, fmt.Errorf("load registered character data from %q: %w", root, err)
 	}
-	root := filepath.Join(appRoot, "engines", engine)
-	if err := requireCharacterData(root); err != nil {
-		return "", fmt.Errorf("engine=%q not found or invalid at %q (%w)", engine, root, err)
-	}
-	return root, nil
+
+	return EngineContext{Root: root, CharacterData: charData}, nil
 }
 
 func requireCharacterData(root string) error {

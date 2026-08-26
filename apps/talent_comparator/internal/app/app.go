@@ -80,7 +80,12 @@ func run(appRoot string, opts Options) error {
 		return fmt.Errorf("talent_config.yaml: name is required")
 	}
 
-	engineRoot, err := engine.ResolveRoot(appRoot, cfg)
+	engineCtx, err := engine.ResolveRoot(appRoot, cfg)
+	if err != nil {
+		return err
+	}
+
+	canonicalChar, err := engine.ResolveCharacterKey(character, engineCtx.CharacterData)
 	if err != nil {
 		return err
 	}
@@ -92,13 +97,13 @@ func run(appRoot string, opts Options) error {
 	tempConfig := filepath.Join(workDir, "temp_config.txt")
 
 	runner := sim.CLIRunner{
-		EngineRoot:       engineRoot,
+		EngineRoot:       engineCtx.Root,
 		OptimizeSubstats: cfg.OptimizeSubstats == nil || *cfg.OptimizeSubstats,
 	}
 
 	baseline := domain.TalentLevels{NA: 6, E: 6, Q: 6}
 	startProgress := time.Now()
-	baselineRes, simElapsed, err := runOnce(context.Background(), runner, configStr, tempConfig, character, baseline)
+	baselineRes, simElapsed, err := runOnce(context.Background(), runner, configStr, tempConfig, character, canonicalChar, baseline)
 	if err != nil {
 		return err
 	}
@@ -136,7 +141,7 @@ func run(appRoot string, opts Options) error {
 				rows = append(rows, buildRow(t, baselineRes.TeamDps, baselineRes.CharDps, baselineRes.Config))
 				continue
 			}
-			res, elapsed, err := runOnce(context.Background(), runner, configStr, tempConfig, character, t)
+			res, elapsed, err := runOnce(context.Background(), runner, configStr, tempConfig, character, canonicalChar, t)
 			simElapsed += elapsed
 			if err != nil {
 				return err
@@ -152,7 +157,7 @@ func run(appRoot string, opts Options) error {
 	{
 		rows := make([]output.Row, 0, len(autoTalents))
 		for _, t := range autoTalents {
-			res, elapsed, err := runOnce(context.Background(), runner, configStr, tempConfig, character, t)
+			res, elapsed, err := runOnce(context.Background(), runner, configStr, tempConfig, character, canonicalChar, t)
 			simElapsed += elapsed
 			if err != nil {
 				return err
@@ -168,7 +173,7 @@ func run(appRoot string, opts Options) error {
 	{
 		rows := make([]output.Row, 0, len(eTalents))
 		for _, t := range eTalents {
-			res, elapsed, err := runOnce(context.Background(), runner, configStr, tempConfig, character, t)
+			res, elapsed, err := runOnce(context.Background(), runner, configStr, tempConfig, character, canonicalChar, t)
 			simElapsed += elapsed
 			if err != nil {
 				return err
@@ -184,7 +189,7 @@ func run(appRoot string, opts Options) error {
 	{
 		rows := make([]output.Row, 0, len(qTalents))
 		for _, t := range qTalents {
-			res, elapsed, err := runOnce(context.Background(), runner, configStr, tempConfig, character, t)
+			res, elapsed, err := runOnce(context.Background(), runner, configStr, tempConfig, character, canonicalChar, t)
 			simElapsed += elapsed
 			if err != nil {
 				return err
@@ -221,7 +226,7 @@ type runDps struct {
 	Config  string
 }
 
-func runOnce(ctx context.Context, runner sim.SimulationRunner, baseConfig string, tempConfigPath string, character string, talents domain.TalentLevels) (runDps, time.Duration, error) {
+func runOnce(ctx context.Context, runner sim.SimulationRunner, baseConfig string, tempConfigPath string, character string, canonicalChar string, talents domain.TalentLevels) (runDps, time.Duration, error) {
 	newConfig, err := config.SetTalents(baseConfig, character, talents.NA, talents.E, talents.Q)
 	if err != nil {
 		return runDps{}, 0, err
@@ -238,23 +243,23 @@ func runOnce(ctx context.Context, runner sim.SimulationRunner, baseConfig string
 	}
 
 	teamDps := int(math.Round(*res.Statistics.DPS.Mean))
-	charDps, err := extractCharacterDps(res, character)
+	charDps, err := extractCharacterDps(res, canonicalChar)
 	if err != nil {
 		return runDps{}, elapsed, err
 	}
 	return runDps{TeamDps: teamDps, CharDps: charDps, Config: res.ConfigFile}, elapsed, nil
 }
 
-func extractCharacterDps(res *sim.SimulationResult, character string) (int, error) {
+func extractCharacterDps(res *sim.SimulationResult, canonicalChar string) (int, error) {
 	idx := -1
 	for i := range res.CharacterDetails {
-		if res.CharacterDetails[i].Name == character {
+		if res.CharacterDetails[i].Name == canonicalChar {
 			idx = i
 			break
 		}
 	}
 	if idx == -1 {
-		return 0, fmt.Errorf("engine result: character %s not found in character_details", character)
+		return 0, fmt.Errorf("engine result: character %s not found in character_details", canonicalChar)
 	}
 	if len(res.Statistics.CharacterDps) <= idx {
 		return 0, fmt.Errorf("engine result: statistics.character_dps[%d] missing", idx)
