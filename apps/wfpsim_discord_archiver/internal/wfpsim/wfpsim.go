@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -93,9 +94,9 @@ type DPS struct {
 }
 
 func (c *Client) FetchShare(ctx context.Context, key string) (Share, error) {
-	url := fmt.Sprintf("https://wfpsim.com/api/share/%s", key)
+	apiURL := fmt.Sprintf("https://wfpsim.com/api/share/%s", url.PathEscape(key))
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
 		return Share{}, err
 	}

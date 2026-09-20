@@ -10,7 +10,7 @@ import (
 
 // FindWfpsimKeys returns all distinct wfpsim share keys found in the given XLSX file.
 // It scans both hyperlinks and plain cell text values in all sheets.
-// Keys are lowercased UUIDs, deduplicated, returned in encounter order.
+// Share identifiers are lowercased, deduplicated, and returned in encounter order.
 func FindWfpsimKeys(f *excelize.File) ([]string, error) {
 	seen := map[string]struct{}{}
 	out := make([]string, 0)

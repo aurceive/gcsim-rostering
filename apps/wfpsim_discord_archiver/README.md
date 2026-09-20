@@ -1,9 +1,10 @@
 # wfpsim_discord_archiver
 
-Архиватор ссылок вида `https://wfpsim.com/sh/<uuid>` из Discord-каналов.
+Архиватор ссылок вида `https://wfpsim.com/sh/<share-id>` из Discord-каналов.
 
 - **Источник**: Discord сообщения (через обычного Discord Bot, не user token).
-- **Данные**: дергает `https://wfpsim.com/api/share/<uuid>` и сохраняет нормализованные поля в Google Sheets.
+- **Идентификатор**: весь сегмент `<share-id>` после `/sh/` является ключом. Это может быть UUID или slug с UUID в конце; разные slug считаются разными share.
+- **Данные**: дергает `https://wfpsim.com/api/share/<share-id>` и сохраняет нормализованные поля в Google Sheets.
 - **Инкрементальность**: при первом запуске читает сообщения за последние `sinceDays` (по умолчанию 30), далее — с последнего обработанного messageId (state в `work/`).
 - **Сортировка**: записи упорядочиваются по `TeamCharacters` (asc), затем по `TeamDpsMean` (desc). В режиме Apps Script сортирует сам скрипт.
 

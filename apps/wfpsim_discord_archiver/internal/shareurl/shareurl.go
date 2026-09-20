@@ -6,10 +6,15 @@ import (
 )
 
 // Share URL format:
-// https://wfpsim.com/sh/<uuid>
-var shareURLRe = regexp.MustCompile(`https?://wfpsim\.com/sh/(?P<key>[0-9a-fA-F-]{36})`)
+// https://wfpsim.com/sh/<share-id>
+//
+// A share-id may be a bare UUID or a slug followed by a UUID. The whole
+// identifier is significant: different slugs can address different shares
+// even when they end in the same UUID.
+var shareURLRe = regexp.MustCompile(`https?://wfpsim\.com/sh/(?P<key>[^/?#\s"'<>]*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?:[?#\s"'<>]|$)`)
 
-// ExtractKeyFromURL returns a lowercased UUID key from a wfpsim share URL.
+// ExtractKeyFromURL returns a lowercased, complete share identifier from a
+// wfpsim share URL.
 func ExtractKeyFromURL(url string) (string, bool) {
 	m := shareURLRe.FindStringSubmatch(url)
 	if len(m) == 0 {
