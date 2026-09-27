@@ -360,7 +360,26 @@ func run(appRoot string, opts Options) error {
 	if !ok {
 		return fmt.Errorf("character %s not found in character data", char)
 	}
-	weaponClass := charInfo.WeaponClass
+	equippedWeaponKey, err := config.FindEquippedWeapon(configStr, char)
+	if err != nil {
+		return err
+	}
+	weaponAliases, err := engine.LoadWeaponAliases(engineRoot)
+	if err != nil {
+		return err
+	}
+	weaponClass, err := resolveCharacterWeaponClass(
+		char,
+		charInfo.WeaponClass,
+		equippedWeaponKey,
+		weaponData,
+		weaponAliases,
+		os.Stdin,
+		os.Stdout,
+	)
+	if err != nil {
+		return err
+	}
 	fmt.Println("Character weapon class:", weaponClass)
 
 	// Get weapons of that class and apply minimum rarity filter
@@ -484,7 +503,7 @@ func run(appRoot string, opts Options) error {
 	}
 	manualWeaponKey := ""
 	manualWeaponRefine := 0
-	if cfg.Weapons.Items != nil && len(cfg.Weapons.Items) > 0 {
+	if len(cfg.Weapons.Items) > 0 {
 		resolved, err := resolveRequestedWeapons(cfg.Weapons.Items, "weapons")
 		if err != nil {
 			return err

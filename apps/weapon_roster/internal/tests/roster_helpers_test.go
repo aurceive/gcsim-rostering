@@ -38,6 +38,21 @@ func TestFindCharIndex(t *testing.T) {
 	}
 }
 
+func TestFindEquippedWeapon(t *testing.T) {
+	configText := "" +
+		"# vodyanitsa add weapon=\"wrongweapon\" refine=1\n" +
+		"vodyanitsa char lvl=90/90;\n" +
+		"vodyanitsa add weapon=\"ttds\" refine=5 lvl=90/90;\n" +
+		"other add weapon=\"bow\" refine=1;\n"
+	got, err := config.FindEquippedWeapon(configText, "vodyanitsa")
+	if err != nil {
+		t.Fatalf("FindEquippedWeapon() error = %v", err)
+	}
+	if got != "ttds" {
+		t.Fatalf("expected ttds, got %q", got)
+	}
+}
+
 func TestBuildMainStatCombos(t *testing.T) {
 	var cfg domain.Config
 	cfg.MainStats.Sands = []string{"atk%=0.466"}

@@ -59,6 +59,28 @@ func TestLoadRegisteredWeaponData_WFPSimIncludesExaiphanesblade(t *testing.T) {
 	}
 }
 
+func TestLoadWeaponAliases_WFPSimIncludesTTDS(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", "..", "..", "..", "engines", "wfpsim"))
+	got, err := LoadWeaponAliases(root)
+	if err != nil {
+		t.Fatalf("LoadWeaponAliases(%q) error = %v", root, err)
+	}
+	if got["ttds"] != "thrillingtalesofdragonslayers" {
+		t.Fatalf("unexpected ttds alias target: %q", got["ttds"])
+	}
+}
+
+func TestLoadWeaponAliases_GCSimIncludesFavLance(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", "..", "..", "..", "engines", "gcsim"))
+	got, err := LoadWeaponAliases(root)
+	if err != nil {
+		t.Fatalf("LoadWeaponAliases(%q) error = %v", root, err)
+	}
+	if got["favlance"] != "favoniuslance" {
+		t.Fatalf("unexpected favlance alias target: %q", got["favlance"])
+	}
+}
+
 func TestLoadRegisteredCharacterData_WFPSimIncludesTravelerCryoAlias(t *testing.T) {
 	root := filepath.Clean(filepath.Join("..", "..", "..", "..", "engines", "wfpsim"))
 	got, err := loadRegisteredCharacterData(root)
@@ -78,6 +100,13 @@ func TestLoadRegisteredCharacterData_WFPSimIncludesTravelerCryoAlias(t *testing.
 	}
 	if canonical.WeaponClass != char.WeaponClass {
 		t.Fatalf("canonical and alias weapon classes differ: %#v vs %#v", canonical, char)
+	}
+	vodyanitsa, ok := got.Data["vodyanitsa"]
+	if !ok {
+		t.Fatalf("vodyanitsa missing from registered characters: %#v", got.Data)
+	}
+	if vodyanitsa.WeaponClass != "WEAPON_CATALYST" {
+		t.Fatalf("unexpected vodyanitsa metadata: %#v", vodyanitsa)
 	}
 }
 
@@ -106,5 +135,54 @@ func TestLoadRegisteredCharacterData_UsesConfigKeyAndAddsTravelerAliases(t *test
 	}
 	if _, ok := got.Data["traveler-cryo"]; !ok {
 		t.Fatalf("traveler-cryo alias missing: %#v", got.Data)
+	}
+}
+
+func TestLoadRegisteredCharacterData_UsesTextprotoKeyWhenConfigIsMissing(t *testing.T) {
+	root := t.TempDir()
+	importsPath := filepath.Join(root, "pkg", "simulation", "imports_char_gen.go")
+	if err := os.MkdirAll(filepath.Dir(importsPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	imports := `package simulation
+
+import (
+	_ "github.com/genshinsim/gcsim/internal/characters/vodyanitsa"
+)
+`
+	if err := os.WriteFile(importsPath, []byte(imports), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	charDir := filepath.Join(root, "internal", "characters", "vodyanitsa")
+	if err := os.MkdirAll(charDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data := "key: \"vodyanitsa\"\nweapon_class: WEAPON_CATALYST\n"
+	if err := os.WriteFile(filepath.Join(charDir, "data_gen.textproto"), []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	unregisteredDir := filepath.Join(root, "internal", "characters", "unregistered")
+	if err := os.MkdirAll(unregisteredDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(unregisteredDir, "data_gen.textproto"), []byte("key: \"unregistered\"\nweapon_class: WEAPON_BOW\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := loadRegisteredCharacterData(root)
+	if err != nil {
+		t.Fatalf("loadRegisteredCharacterData() error = %v", err)
+	}
+	char, ok := got.Data["vodyanitsa"]
+	if !ok {
+		t.Fatalf("vodyanitsa missing from registered characters: %#v", got.Data)
+	}
+	if char.WeaponClass != "WEAPON_CATALYST" {
+		t.Fatalf("unexpected vodyanitsa metadata: %#v", char)
+	}
+	if _, ok := got.Data["unregistered"]; ok {
+		t.Fatalf("unregistered character must be excluded: %#v", got.Data)
 	}
 }
