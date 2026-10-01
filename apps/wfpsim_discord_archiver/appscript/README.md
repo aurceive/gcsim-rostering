@@ -40,8 +40,12 @@ POST JSON:
   "apiKey": "...",
   "sheetId": "...",
   "sheetName": "wfpsim",
-  "record": {
-    "row": ["FetchedAt", "DiscordGuildID", "..." ]
-  }
+  "records": [
+    { "row": ["FetchedAt", "DiscordGuildID", "..." ] },
+    { "row": ["FetchedAt", "DiscordGuildID", "..." ] }
+  ]
 }
 ```
+
+`records` is sent in batches of up to 10 rows. The endpoint also continues to accept
+the legacy single `record` field.

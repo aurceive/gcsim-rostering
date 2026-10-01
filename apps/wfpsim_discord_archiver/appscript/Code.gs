@@ -40,7 +40,7 @@ function doPost(e) {
       return jsonResponse_(400, { ok: false, error: "missing record(s)" });
     }
 
-    var appended = 0;
+    var rowsToAppend = [];
     for (var i = 0; i < records.length; i++) {
       var r = records[i];
       // Expected: row is array in correct column order
@@ -62,10 +62,15 @@ function doPost(e) {
         continue;
       }
 
-      sh.appendRow(mapped);
+      rowsToAppend.push(mapped);
       existingKeys[shareKey] = true;
-      appended++;
     }
+
+    if (rowsToAppend.length > 0) {
+      var startRow = sh.getLastRow() + 1;
+      sh.getRange(startRow, 1, rowsToAppend.length, rowsToAppend[0].length).setValues(rowsToAppend);
+    }
+    var appended = rowsToAppend.length;
 
     // Apply table rules: custom sort + merge UI blocks.
     sortAndMerge_(sh);

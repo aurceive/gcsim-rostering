@@ -101,23 +101,64 @@ func Run(ctx context.Context, cfg config.Config) error {
 	cutoff := time.Now().Add(-time.Duration(cfg.Run.SinceDays) * 24 * time.Hour)
 	seenKeys := map[string]struct{}{}
 	channelGuildID := map[string]string{}
+	pendingRows := make([]sheetsapi.Record, 0, sheetsapi.MaxBatchSize)
+
+	flushBatch := func() error {
+		if len(pendingRows) == 0 {
+			return nil
+		}
+		batch := pendingRows
+		pendingRows = make([]sheetsapi.Record, 0, sheetsapi.MaxBatchSize)
+		if err := writer.AppendRows(ctx, batch); err != nil {
+			return err
+		}
+		now := time.Now()
+		for _, record := range batch {
+			st.ProcessedKeys[record.Key] = now
+		}
+		totalNewKeys += len(batch)
+		if !cfg.Run.DryRun {
+			if err := saveRunState(cfg, st); err != nil {
+				return fmt.Errorf("save state after confirmed batch: %w", err)
+			}
+		}
+		fmt.Printf("Archived batch: %d keys\n", len(batch))
+		return nil
+	}
+
+	queueRow := func(row []interface{}, key, messageID string) error {
+		pendingRows = append(pendingRows, sheetsapi.Record{
+			Row: row, Key: key, MessageID: messageID,
+		})
+		if len(pendingRows) >= sheetsapi.MaxBatchSize {
+			return flushBatch()
+		}
+		return nil
+	}
 
 	if cfg.Run.Mode == "urlList" {
 		fmt.Printf("Using run.mode=urlList (%d URLs)\n", len(cfg.Run.URLs))
 		keys := make([]string, 0, len(cfg.Run.URLs))
+		seenInputKeys := make(map[string]struct{}, len(cfg.Run.URLs))
 		for _, u := range cfg.Run.URLs {
 			u = strings.TrimSpace(u)
 			if u == "" {
 				continue
 			}
+			var key string
 			if k, ok := shareurl.ExtractKeyFromURL(u); ok {
-				keys = append(keys, k)
+				key = k
 			} else {
 				// Treat bare UUID as key directly.
-				keys = append(keys, strings.ToLower(u))
+				key = strings.ToLower(u)
+			}
+			if _, exists := seenInputKeys[key]; !exists {
+				seenInputKeys[key] = struct{}{}
+				keys = append(keys, key)
 			}
 		}
-		fmt.Printf("Parsed %d wfpsim keys from urls\n", len(keys))
+		fmt.Printf("Discovered keys: %d\n", len(keys))
+		fmt.Printf("New keys: %d\n", countUnprocessedKeys(keys, st.ProcessedKeys))
 
 		for _, key := range keys {
 			if _, ok := st.ProcessedKeys[key]; ok {
@@ -133,11 +174,12 @@ func Run(ctx context.Context, cfg config.Config) error {
 			if err != nil {
 				return err
 			}
-			if err := writer.AppendRow(ctx, row, key, ""); err != nil {
+			if err := queueRow(row, key, ""); err != nil {
 				return err
 			}
-			totalNewKeys++
-			st.ProcessedKeys[key] = time.Now()
+		}
+		if err := flushBatch(); err != nil {
+			return err
 		}
 		goto finalize
 	}
@@ -150,7 +192,8 @@ func Run(ctx context.Context, cfg config.Config) error {
 		if err != nil {
 			return fmt.Errorf("fetch google sheets: %w", err)
 		}
-		fmt.Printf("Found %d wfpsim keys in source sheet\n", len(keys))
+		fmt.Printf("Discovered keys: %d\n", len(keys))
+		fmt.Printf("New keys: %d\n", countUnprocessedKeys(keys, st.ProcessedKeys))
 
 		for _, key := range keys {
 			if _, ok := st.ProcessedKeys[key]; ok {
@@ -166,11 +209,12 @@ func Run(ctx context.Context, cfg config.Config) error {
 			if err != nil {
 				return err
 			}
-			if err := writer.AppendRow(ctx, row, key, ""); err != nil {
+			if err := queueRow(row, key, ""); err != nil {
 				return err
 			}
-			totalNewKeys++
-			st.ProcessedKeys[key] = time.Now()
+		}
+		if err := flushBatch(); err != nil {
+			return err
 		}
 		goto finalize
 	}
@@ -195,6 +239,9 @@ func Run(ctx context.Context, cfg config.Config) error {
 				return err
 			}
 			fmt.Printf("Fetched %d messages from guild search (guild=%s)\n", len(msgs), guildID)
+			keysFound := keysInMessages(msgs, cutoff)
+			fmt.Printf("Discovered keys: %d\n", len(keysFound))
+			fmt.Printf("New keys: %d\n", countUnprocessedKeys(keysFound, st.ProcessedKeys))
 
 			for _, m := range msgs {
 				// We still iterate over everything search returned, but only *process* messages
@@ -227,13 +274,14 @@ func Run(ctx context.Context, cfg config.Config) error {
 					if err != nil {
 						return err
 					}
-					if err := writer.AppendRow(ctx, row, key, m.ID); err != nil {
+					if err := queueRow(row, key, m.ID); err != nil {
 						return err
 					}
 
-					totalNewKeys++
-					st.ProcessedKeys[key] = time.Now()
 				}
+			}
+			if err := flushBatch(); err != nil {
+				return err
 			}
 
 			if !cfg.Run.IgnoreStateCheckpoint {
@@ -270,6 +318,9 @@ func Run(ctx context.Context, cfg config.Config) error {
 			return err
 		}
 		fmt.Printf("Fetched %d messages from channel %s\n", len(msgs), chID)
+		keysFound := keysInMessages(msgs, cutoff)
+		fmt.Printf("Discovered keys: %d\n", len(keysFound))
+		fmt.Printf("New keys: %d\n", countUnprocessedKeys(keysFound, st.ProcessedKeys))
 
 		channelNewKeys := 0
 		for _, m := range msgs {
@@ -299,14 +350,15 @@ func Run(ctx context.Context, cfg config.Config) error {
 				if err != nil {
 					return err
 				}
-				if err := writer.AppendRow(ctx, row, key, m.ID); err != nil {
+				if err := queueRow(row, key, m.ID); err != nil {
 					return err
 				}
 
-				totalNewKeys++
 				channelNewKeys++
-				st.ProcessedKeys[key] = time.Now()
 			}
+		}
+		if err := flushBatch(); err != nil {
+			return err
 		}
 		fmt.Printf("Processed %d new keys from channel %s\n", channelNewKeys, chID)
 
@@ -361,6 +413,46 @@ func saveProcessedKeysOnly(path string, keys map[string]time.Time) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+func saveRunState(cfg config.Config, st state.State) error {
+	if cfg.Run.IgnoreStateCheckpoint {
+		return saveProcessedKeysOnly(cfg.Run.StateFile, st.ProcessedKeys)
+	}
+	return state.Save(cfg.Run.StateFile, st)
+}
+
+func countUnprocessedKeys(keys []string, processed map[string]time.Time) int {
+	count := 0
+	seen := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		if _, exists := processed[key]; !exists {
+			count++
+		}
+	}
+	return count
+}
+
+func keysInMessages(messages []discord.Message, cutoff time.Time) []string {
+	seen := make(map[string]struct{})
+	keys := make([]string, 0)
+	for _, message := range messages {
+		if !cutoff.IsZero() && (message.CreatedAt.IsZero() || message.CreatedAt.Before(cutoff)) {
+			continue
+		}
+		for _, key := range extractKeys(message.Content) {
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			keys = append(keys, key)
+		}
+	}
+	return keys
 }
 
 func pruneProcessedKeys(st *state.State, maxAge time.Duration) {
@@ -600,6 +692,10 @@ type rowWriter interface {
 	AppendRow(ctx context.Context, row []interface{}, key string, messageID string) error
 }
 
+type batchRowWriter interface {
+	AppendRows(ctx context.Context, records []sheetsapi.Record) error
+}
+
 type multiWriter struct {
 	writers []rowWriter
 }
@@ -617,6 +713,23 @@ func (m multiWriter) AppendRow(ctx context.Context, row []interface{}, key strin
 }
 
 type dryRunWriter struct{}
+
+func (m multiWriter) AppendRows(ctx context.Context, records []sheetsapi.Record) error {
+	for _, writer := range m.writers {
+		if batchWriter, ok := writer.(batchRowWriter); ok {
+			if err := batchWriter.AppendRows(ctx, records); err != nil {
+				return err
+			}
+			continue
+		}
+		for _, record := range records {
+			if err := writer.AppendRow(ctx, record.Row, record.Key, record.MessageID); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
 
 func (dryRunWriter) AppendRow(ctx context.Context, row []interface{}, key string, messageID string) error {
 	_ = ctx

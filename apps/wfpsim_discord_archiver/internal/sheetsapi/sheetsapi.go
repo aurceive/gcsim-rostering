@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const MaxBatchSize = 10
+
 type Client struct {
 	url      string
 	apiKey   string
@@ -28,14 +30,20 @@ func New(webAppURL, apiKey, sheetID, sheetTab string) *Client {
 }
 
 type postRequest struct {
-	APIKey    string     `json:"apiKey"`
-	SheetID   string     `json:"sheetId"`
-	SheetName string     `json:"sheetName"`
-	Record    postRecord `json:"record"`
+	APIKey    string       `json:"apiKey"`
+	SheetID   string       `json:"sheetId"`
+	SheetName string       `json:"sheetName"`
+	Records   []postRecord `json:"records"`
 }
 
 type postRecord struct {
 	Row []interface{} `json:"row"`
+}
+
+type Record struct {
+	Row       []interface{}
+	Key       string
+	MessageID string
 }
 
 type postResponse struct {
@@ -45,14 +53,25 @@ type postResponse struct {
 }
 
 func (c *Client) AppendRow(ctx context.Context, row []interface{}, key string, messageID string) error {
-	_ = key
-	_ = messageID
+	return c.AppendRows(ctx, []Record{{Row: row, Key: key, MessageID: messageID}})
+}
 
+func (c *Client) AppendRows(ctx context.Context, records []Record) error {
+	if len(records) == 0 {
+		return nil
+	}
+	if len(records) > MaxBatchSize {
+		return fmt.Errorf("apps script batch has %d records; maximum is %d", len(records), MaxBatchSize)
+	}
+	postRecords := make([]postRecord, len(records))
+	for i, record := range records {
+		postRecords[i] = postRecord{Row: record.Row}
+	}
 	reqBody := postRequest{
 		APIKey:    c.apiKey,
 		SheetID:   c.sheetID,
 		SheetName: c.sheetTab,
-		Record:    postRecord{Row: row},
+		Records:   postRecords,
 	}
 
 	b, err := json.Marshal(reqBody)
@@ -73,15 +92,20 @@ func (c *Client) AppendRow(ctx context.Context, row []interface{}, key string, m
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("apps script returned HTTP %s", resp.Status)
+	}
+
 	var pr postResponse
 	if err := json.NewDecoder(resp.Body).Decode(&pr); err != nil {
-		return fmt.Errorf("apps script decode response: %w", err)
+		return fmt.Errorf("apps script decode response (HTTP %s, content-type %q): %w",
+			resp.Status, resp.Header.Get("Content-Type"), err)
 	}
 	if !pr.OK {
 		if pr.Error != "" {
-			return fmt.Errorf("apps script error: %s", pr.Error)
+			return fmt.Errorf("apps script error (HTTP %s): %s", resp.Status, pr.Error)
 		}
-		return fmt.Errorf("apps script error")
+		return fmt.Errorf("apps script error (HTTP %s)", resp.Status)
 	}
 	return nil
 }
