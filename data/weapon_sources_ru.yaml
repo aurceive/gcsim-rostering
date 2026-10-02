@@ -258,6 +258,8 @@ sequenceofsolitude: ["Ивент"]
 snarehook: ["Ковка"]
 # Струны дождя радужного змея
 rainbowserpentsrainbow: ["Ивент"]
+# Струны дождя радужного змея
+rainbowserpentbow: ["Ивент"]
 # Клинок озарения
 exaiphanesblade: ["Квесты"]
 # Застывшее сердце зимы
@@ -266,3 +268,13 @@ wintersheavyheart: ["Ивентовая оружейная молитва"]
 echoesoftheheart: ["Ковка"]
 # Игры королей
 clashofkings: ["БП"]
+# Новая ветвь
+newbough: ["Ивентовая оружейная молитва"]
+# Серебряный свет
+silverlight: ["Ивент"]
+# Источник пламени
+emberwell: ["Ковка"]
+# Расплавленный клинок еретика
+hereticsmoltenblade: ["БП"]
+# Напевы нежного ветра
+breezebornerefrain: ["Ивентовая оружейная молитва"]
