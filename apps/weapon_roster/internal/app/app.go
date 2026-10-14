@@ -840,7 +840,11 @@ func run(appRoot string, opts Options) error {
 	}
 
 	// Export to xlsx (no console result output)
-	xlsxPath, err := output.ExportResultsXLSX(appRoot, char, charOrder, cfg.RosterName, target, finalVariantOrder, finalResultsByVariant, weaponData, weaponNames, weaponSources, outputPath, manualWeaponKey, manualWeaponRefine)
+	runConfigFiles := []output.RunConfigFile{
+		{Name: filepath.Base(configPath), Content: configStr},
+		{Name: filepath.Base(rosterConfigPath), Content: string(yamlBytes)},
+	}
+	xlsxPath, err := output.ExportResultsXLSX(appRoot, char, charOrder, cfg.RosterName, target, finalVariantOrder, finalResultsByVariant, weaponData, weaponNames, weaponSources, outputPath, runConfigFiles, manualWeaponKey, manualWeaponRefine)
 	if err != nil {
 		return err
 	}

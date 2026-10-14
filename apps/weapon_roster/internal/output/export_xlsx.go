@@ -14,11 +14,17 @@ import (
 	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/weapons"
 
 	"github.com/xuri/excelize/v2"
+	"gopkg.in/yaml.v3"
 )
 
 type resultKey struct {
 	Weapon string
 	Refine int
+}
+
+type RunConfigFile struct {
+	Name    string
+	Content string
 }
 
 func colName(n int) string {
@@ -33,6 +39,98 @@ func colName(n int) string {
 		n /= 26
 	}
 	return out
+}
+
+func writeRunConfigSheet(f *excelize.File, configFiles []RunConfigFile) error {
+	const sheet = "Run Config"
+	if _, err := f.NewSheet(sheet); err != nil {
+		return err
+	}
+
+	if err := f.SetColWidth(sheet, "A", "A", 30); err != nil {
+		return err
+	}
+	if err := f.SetColWidth(sheet, "B", "B", 32); err != nil {
+		return err
+	}
+	if err := f.SetColWidth(sheet, "C", "C", 100); err != nil {
+		return err
+	}
+
+	headerStyleID, err := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{Bold: true},
+	})
+	if err != nil {
+		return err
+	}
+	if err := f.SetCellValue(sheet, "A1", "Config file"); err != nil {
+		return err
+	}
+	if err := f.SetCellValue(sheet, "B1", "Setting"); err != nil {
+		return err
+	}
+	if err := f.SetCellValue(sheet, "C1", "Content"); err != nil {
+		return err
+	}
+	if err := f.SetCellStyle(sheet, "A1", "C1", headerStyleID); err != nil {
+		return err
+	}
+
+	contentStyleID, err := f.NewStyle(&excelize.Style{
+		Alignment: &excelize.Alignment{Vertical: "top", WrapText: true},
+	})
+	if err != nil {
+		return err
+	}
+	row := 2
+	for _, configFile := range configFiles {
+		content := strings.ReplaceAll(configFile.Content, "\r\n", "\n")
+		if err := f.SetCellValue(sheet, fmt.Sprintf("A%d", row), configFile.Name); err != nil {
+			return err
+		}
+		if err := f.SetCellValue(sheet, fmt.Sprintf("C%d", row), content); err != nil {
+			return err
+		}
+		if err := f.SetCellStyle(sheet, fmt.Sprintf("C%d", row), fmt.Sprintf("C%d", row), contentStyleID); err != nil {
+			return err
+		}
+		row++
+
+		if !strings.Contains(strings.ToLower(configFile.Name), "roster_config") {
+			continue
+		}
+
+		var config yaml.Node
+		if err := yaml.Unmarshal([]byte(content), &config); err != nil {
+			return fmt.Errorf("parse run config %s: %w", configFile.Name, err)
+		}
+		if len(config.Content) == 0 || config.Content[0].Kind != yaml.MappingNode {
+			return fmt.Errorf("parse run config %s: expected a top-level YAML mapping", configFile.Name)
+		}
+		root := config.Content[0]
+		for i := 0; i+1 < len(root.Content); i += 2 {
+			key := root.Content[i].Value
+			value, err := yaml.Marshal(root.Content[i+1])
+			if err != nil {
+				return fmt.Errorf("serialize run config setting %q in %s: %w", key, configFile.Name, err)
+			}
+			if err := f.SetCellValue(sheet, fmt.Sprintf("A%d", row), configFile.Name); err != nil {
+				return err
+			}
+			if err := f.SetCellValue(sheet, fmt.Sprintf("B%d", row), key); err != nil {
+				return err
+			}
+			if err := f.SetCellValue(sheet, fmt.Sprintf("C%d", row), strings.TrimSuffix(string(value), "\n")); err != nil {
+				return err
+			}
+			if err := f.SetCellStyle(sheet, fmt.Sprintf("C%d", row), fmt.Sprintf("C%d", row), contentStyleID); err != nil {
+				return err
+			}
+			row++
+		}
+	}
+
+	return nil
 }
 
 func bestAvailableBenchmarks(results []domain.Result, weaponData domain.WeaponData, weaponSources map[string][]string, referenceWeapon string, referenceRefine int) (bestAvailableTeamDps int, bestAvailableCharDps int) {
@@ -160,7 +258,7 @@ func sortVariantResults(results []domain.Result, target domain.Target) []domain.
 	return out
 }
 
-func ExportResultsXLSX(appRoot string, char string, partyMembers []string, rosterName string, target domain.Target, variantOrder []string, resultsByVariant map[string][]domain.Result, weaponData domain.WeaponData, weaponNames map[string]string, weaponSources map[string][]string, outputPath string, referenceWeapon string, referenceRefine int) (string, error) {
+func ExportResultsXLSX(appRoot string, char string, partyMembers []string, rosterName string, target domain.Target, variantOrder []string, resultsByVariant map[string][]domain.Result, weaponData domain.WeaponData, weaponNames map[string]string, weaponSources map[string][]string, outputPath string, runConfigFiles []RunConfigFile, referenceWeapon string, referenceRefine int) (string, error) {
 	if len(variantOrder) == 0 {
 		variantOrder = []string{"default"}
 	}
@@ -184,6 +282,9 @@ func ExportResultsXLSX(appRoot string, char string, partyMembers []string, roste
 	_ = f.SetSheetName(defaultSheet, sheet)
 	sheetWithConfig := "Config"
 	_, _ = f.NewSheet(sheetWithConfig)
+	if err := writeRunConfigSheet(f, runConfigFiles); err != nil {
+		return "", err
+	}
 
 	resultsLastCol := colName(len(variantOrder) * resultsBlockSize)
 	if resultsLastCol == "" {

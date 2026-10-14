@@ -28,7 +28,11 @@ func TestExportResultsXLSX_NewLayoutUsesIndependentVariantBlocks(t *testing.T) {
 	}
 
 	outPath := filepath.Join(tmpDir, "results.xlsx")
-	filename, err := ExportResultsXLSX(tmpDir, "raiden", []string{"raiden", "furina", "bennett", "xiangling"}, "test", domain.TargetTeamDps, []string{"a", "b"}, resultsByVariant, weaponData, weaponNames, weaponSources, outPath, "", 0)
+	runConfigFiles := []RunConfigFile{
+		{Name: "config.txt", Content: "raiden char lvl=90/90;\nactive raiden;\n"},
+		{Name: "roster_config.yaml", Content: "engine: gcsim\nchar: raiden\nroster_name: test\nweapons:\n  append: true\n  items:\n    - harp\n"},
+	}
+	filename, err := ExportResultsXLSX(tmpDir, "raiden", []string{"raiden", "furina", "bennett", "xiangling"}, "test", domain.TargetTeamDps, []string{"a", "b"}, resultsByVariant, weaponData, weaponNames, weaponSources, outPath, runConfigFiles, "", 0)
 	if err != nil {
 		t.Fatalf("export failed: %v", err)
 	}
@@ -85,6 +89,36 @@ func TestExportResultsXLSX_NewLayoutUsesIndependentVariantBlocks(t *testing.T) {
 	}
 	if got, _ := f.GetCellValue("Config", "R4"); got != "cfg-b-w1" {
 		t.Fatalf("unexpected config value for variant b: %q", got)
+	}
+	if got, _ := f.GetCellValue("Run Config", "A1"); got != "Config file" {
+		t.Fatalf("unexpected run config header: %q", got)
+	}
+	if got, _ := f.GetCellValue("Run Config", "B1"); got != "Setting" {
+		t.Fatalf("unexpected run config setting header: %q", got)
+	}
+	if got, _ := f.GetCellValue("Run Config", "A2"); got != "config.txt" {
+		t.Fatalf("unexpected first run config file: %q", got)
+	}
+	if got, _ := f.GetCellValue("Run Config", "C2"); got != "raiden char lvl=90/90;\nactive raiden;\n" {
+		t.Fatalf("unexpected first run config content: %q", got)
+	}
+	if got, _ := f.GetCellValue("Run Config", "A3"); got != "roster_config.yaml" {
+		t.Fatalf("unexpected second run config file: %q", got)
+	}
+	if got, _ := f.GetCellValue("Run Config", "C3"); got != "engine: gcsim\nchar: raiden\nroster_name: test\nweapons:\n  append: true\n  items:\n    - harp\n" {
+		t.Fatalf("unexpected second run config content: %q", got)
+	}
+	if got, _ := f.GetCellValue("Run Config", "B4"); got != "engine" {
+		t.Fatalf("unexpected first top-level setting: %q", got)
+	}
+	if got, _ := f.GetCellValue("Run Config", "C4"); got != "gcsim" {
+		t.Fatalf("unexpected first top-level value: %q", got)
+	}
+	if got, _ := f.GetCellValue("Run Config", "B7"); got != "weapons" {
+		t.Fatalf("unexpected nested top-level setting: %q", got)
+	}
+	if got, _ := f.GetCellValue("Run Config", "C7"); got != "append: true\nitems:\n    - harp" {
+		t.Fatalf("unexpected nested top-level value: %q", got)
 	}
 
 	variantOrder, imported, err := ImportResultsXLSX(filename, weaponData, weaponNames)
