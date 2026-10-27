@@ -1,6 +1,5 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('gcsim','wfpsim','custom','wfpsim-custom','all')]
   [string]$Engine = 'all',
 
   [string[]]$Targets = @('gcsim'),
@@ -12,6 +11,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+. (Join-Path $PSScriptRoot 'engine-common.ps1')
 
 function Assert-Command {
   param(
@@ -48,20 +48,6 @@ function Invoke-InDir {
   }
 }
 
-function Get-EngineDirs {
-  param([string]$engine)
-
-  $map = @{
-    'gcsim'  = @('gcsim')
-    'wfpsim' = @('wfpsim')
-    'custom' = @('custom')
-    'wfpsim-custom' = @('wfpsim-custom')
-    'all'    = @('gcsim','wfpsim','custom','wfpsim-custom')
-  }
-
-  return $map[$engine] | ForEach-Object { Join-Path $repoRoot (Join-Path 'engines' $_) }
-}
-
 Assert-Command -Name 'git'
 Assert-Command -Name 'go'
 
@@ -75,7 +61,7 @@ try {
   }
 
   Invoke-Step -Title 'Download engine Go modules' -Action {
-    $engineDirs = Get-EngineDirs -engine $Engine
+    $engineDirs = Get-EngineDirs -Engine $Engine -RepoRoot $repoRoot
     foreach ($engineDir in $engineDirs) {
       if (-not (Test-Path -LiteralPath $engineDir)) {
         Write-Host "[skip] missing dir: $engineDir"
@@ -84,6 +70,9 @@ try {
 
       Invoke-InDir -Directory $engineDir -Action {
         & go mod download
+        if ($LASTEXITCODE -ne 0) {
+          throw "go mod download failed in $engineDir (exit $LASTEXITCODE)"
+        }
       }
     }
   }

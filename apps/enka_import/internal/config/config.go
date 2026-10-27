@@ -85,7 +85,7 @@ func Load(appRoot string, args []string) (Config, error) {
 
 	fs.Var(&configPath, "config", "path to config yaml (default: input/enka_import/config.yaml)")
 	fs.BoolVar(&useExamples, "useExamples", false, "use example config from input/enka_import/examples/")
-	fs.Var(&engineOpt, "engine", "engine name under ./engines (e.g. gcsim, wfpsim, wfpsim-custom, custom)")
+	fs.Var(&engineOpt, "engine", "engine directory under ./engines (e.g. gcsim or wfpsim; data compatibility varies)")
 	fs.Var(&enginePathOpt, "engine-path", "explicit path to engine root (overrides -engine)")
 	fs.Var(&uidOpt, "uid", "Enka UID (9 digits)")
 	fs.Var(&outOpt, "out", "output .txt path (overrides outDir)")

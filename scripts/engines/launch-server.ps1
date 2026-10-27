@@ -1,7 +1,6 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet('gcsim','wfpsim','custom','wfpsim-custom')]
   [string]$Engine,
 
   [string]$ListenHost = '127.0.0.1',
@@ -22,6 +21,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+. (Join-Path $PSScriptRoot 'engine-common.ps1')
 
 function Assert-Command {
   param([Parameter(Mandatory = $true)][string]$Name)
@@ -32,7 +32,11 @@ function Assert-Command {
 
 Assert-Command -Name 'go'
 
-$engineDir = Join-Path $repoRoot (Join-Path 'engines' $Engine)
+$engineDirs = @(Get-EngineDirs -Engine $Engine -RepoRoot $repoRoot)
+if ($engineDirs.Count -ne 1) {
+  throw "launch-server.ps1 requires one engine name, not '$Engine'"
+}
+$engineDir = $engineDirs[0]
 if (-not (Test-Path -LiteralPath $engineDir)) {
   throw "Engine directory not found: $engineDir"
 }

@@ -1,69 +1,65 @@
-# Engines (сабмодули)
+# Движки-симуляторы
 
-Этот каталог содержит сабмодули движков. Корневой README оставляет только основной пайплайн, а здесь — детали/варианты.
+Каждый движок подключается как Git submodule непосредственно в `engines/<имя>`. URL, ветка и параметры получения submodule задаются в корневом `.gitmodules`. Скрипты сборки читают имена движков из этой конфигурации, поэтому новые submodule в `engines/` доступны без обновления списков в скриптах.
 
-## Привязка сабмодулей к веткам
+Каталог `engines/bins/` используется для локальных бинарников и не является submodule.
 
-Сабмодули уже привязаны к веткам в `.gitmodules`:
+## Инициализация и обновление
 
-- `engines/gcsim` → `main`
-- `engines/wfpsim` → `develop`
-- `engines/custom` → `custom`
-- `engines/wfpsim-custom` → `wfpsim-custom`
+PowerShell-скрипт синхронизирует URL, инициализирует submodule и обновляет их до указанных в `.gitmodules` веток:
 
-Примечание: если указанная ветка отсутствует на `origin`, скрипт обновления использует fallback на `origin/HEAD`.
+```powershell
+scripts/engines/update-submodules.ps1
+```
 
-## Инициализация/обновление сабмодулей
+Стандартные команды Git:
 
-### Вариант 1: скриптом (PowerShell)
+```powershell
+git submodule sync --recursive
+git submodule update --init --recursive --depth 1 --recommend-shallow
+```
 
-- `../scripts/engines/update-submodules.ps1`
+Чтобы обновить рабочие копии до веток, настроенных в `.gitmodules`, используйте `scripts/engines/update-submodules.ps1`. Например, движок может быть подключён с ветки `develop` или `main`; актуальная настройка находится в `.gitmodules`.
 
-### Вариант 2: команды Git (PowerShell)
+## Go-зависимости и сборка CLI
 
-- `git submodule sync --recursive`
-- `git submodule update --init --recursive --depth 1 --recommend-shallow`
-- `git submodule update --remote --recursive --depth 1 --recommend-shallow`
+Скрипты поддерживают имя любого настроенного submodule в `engines/`, а значение `all` выбирает все такие движки. Примеры:
 
-## Go-зависимости
+```powershell
+# Инициализировать/обновить submodules, загрузить Go-модули и собрать gcsim CLI выбранного движка
+scripts/engines/bootstrap.ps1 -Engine kqmsim
 
-Если нужно заранее скачать зависимости во всех движках:
+# Собрать стандартные цели для всех настроенных движков
+scripts/engines/build-engine-clis.ps1 -Engine all
 
-- `go -C gcsim mod download`
-- `go -C wfpsim mod download`
-- `go -C custom mod download`
-- `go -C wfpsim-custom mod download`
+# Собрать только CLI и server для одного движка
+scripts/engines/build-engine-clis.ps1 -Engine wfpsim -Targets gcsim,server
 
-## Сборка CLI движков
+# Загрузить Go-модули и собрать несколько целей одного движка
+scripts/engines/bootstrap.ps1 -Engine gcsim -Targets gcsim,repl,server
+```
 
-Бинарники движков складываются в `engines/bins/<engine>/` (это держит сабмодули чистыми).
+`bootstrap.ps1` по умолчанию обновляет все submodule, но загружает зависимости и собирает CLI только для выбранного движка (`gcsim` по умолчанию). Используйте `-Engine all`, чтобы выбрать все настроенные движки.
 
-### Вариант 1: сборка скриптом (PowerShell)
+Результат сборки сохраняется вне каталогов submodule:
 
-- Собрать все 3 движка (gcsim/wfpsim/custom) и цели `gcsim`, `repl`, `server`:
-  - `../scripts/engines/build-engine-clis.ps1`
+```text
+engines/bins/<имя-движка>/<цель>.exe
+```
 
-- Собрать все 4 движка (gcsim/wfpsim/custom/wfpsim-custom):
-  - `../scripts/engines/build-engine-clis.ps1 -Engine all`
+Например, для `kqmsim` CLI будет расположен в `engines/bins/kqmsim/gcsim.exe`.
 
-Также можно использовать общий скрипт (обновление сабмодулей + download + сборка CLI):
+## Server mode
 
-- `../scripts/engines/bootstrap.ps1`
+Запустите сервер для выбранного движка:
 
-Примеры результата (пути):
+```powershell
+scripts/engines/launch-server.ps1 -Engine kqmsim
+scripts/engines/launch-server.ps1 -Engine gcsim -Port 54322 -Workers 4
+```
 
-- `bins/gcsim/gcsim.exe`
-- `bins/wfpsim/gcsim.exe`
-- `bins/custom/gcsim.exe`
-- `bins/wfpsim-custom/gcsim.exe`
+Параметры подключения (адрес, порт, число workers, timeout и share key) настраиваются параметрами `launch-server.ps1`. Для уже собранного сервера можно указать `-NoBuild`; дополнительные опции обновления описаны в `Get-Help scripts/engines/launch-server.ps1 -Full`.
 
-### Вариант 2: вручную (PowerShell)
+## Совместимость с приложениями
 
-- gcsim:
-  - `go -C gcsim build -o ..\bins\gcsim\gcsim.exe ./cmd/gcsim`
-- wfpsim:
-  - `go -C wfpsim build -o ..\bins\wfpsim\gcsim.exe ./cmd/gcsim`
-- custom:
-  - `go -C custom build -o ..\bins\custom\gcsim.exe ./cmd/gcsim`
-- wfpsim-custom:
-  - `go -C wfpsim-custom build -o ..\bins\wfpsim-custom\gcsim.exe ./cmd/gcsim`
+Скрипты обеспечивают получение submodule и сборку его CLI, но приложения, которые читают игровые данные из дерева движка, могут ожидать конкретные файлы или их формат. Например, KQM размещает часть данных в `ui/packages/db/src/Data`, тогда как некоторые загрузчики приложений используют файлы из UI-пакета или ожидают сгенерированные JSON-файлы. Перед выбором движка в конфигурации приложения проверьте его требования и поддержку формата; подключение submodule само по себе такую совместимость не гарантирует.

@@ -1,6 +1,5 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('gcsim','wfpsim','custom','wfpsim-custom','all')]
   [string]$Engine = 'all',
 
   [string[]]$Targets = @('gcsim','repl','server')
@@ -10,22 +9,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+. (Join-Path $PSScriptRoot 'engine-common.ps1')
 
 $binsRoot = Join-Path $repoRoot (Join-Path 'engines' 'bins')
-
-function Get-EngineDirs {
-  param([string]$engine)
-
-  $map = @{
-    'gcsim'  = @('gcsim')
-    'wfpsim' = @('wfpsim')
-    'custom' = @('custom')
-    'wfpsim-custom' = @('wfpsim-custom')
-    'all'    = @('gcsim','wfpsim','custom','wfpsim-custom')
-  }
-
-  return $map[$engine] | ForEach-Object { Join-Path $repoRoot (Join-Path 'engines' $_) }
-}
 
 function Build-Target {
   param(
@@ -48,9 +34,12 @@ function Build-Target {
 
   Write-Host "[build] ${engineDir}: $pkgPath -> $outExe"
   & go -C $engineDir build -o $outExe $pkgPath
+  if ($LASTEXITCODE -ne 0) {
+    throw "go build failed for $engineName $pkgPath (exit $LASTEXITCODE)"
+  }
 }
 
-$engineDirs = Get-EngineDirs -engine $Engine
+$engineDirs = Get-EngineDirs -Engine $Engine -RepoRoot $repoRoot
 foreach ($engineDir in $engineDirs) {
   if (-not (Test-Path $engineDir)) {
     Write-Host "[skip] missing dir: $engineDir"

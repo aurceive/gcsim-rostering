@@ -30,7 +30,8 @@ apps/enka_import/enka_import.exe -engine wfpsim-custom -uid 123456789
 
 - `-config` — путь до YAML-конфига (по умолчанию `input/enka_import/config.yaml`).
 - `-useExamples` — использовать пример конфига из `input/enka_import/examples/`.
-- `-engine` — имя движка из папки `engines/` (например: `gcsim`, `wfpsim`, `wfpsim-custom`, `custom`).
+- `-engine` — имя движка из папки `engines/` (например: `gcsim`, `wfpsim` или `kqmsim`).
+- Загрузка данных требует наличия ожидаемых этим приложением файлов персонажей, оружия и артефактов. Состав и расположение данных различаются между ветками; формат KQM в текущей версии загрузчиком не поддерживается.
 - `-engine-path` — явный путь до `engines/<engine>` (если не стандартное расположение).
 - `-uid` — UID игрока (9 цифр).
 - `-out` — полный путь к результирующему `.txt` (перекрывает `-out-dir`).

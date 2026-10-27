@@ -18,3 +18,8 @@
 	url = https://github.com/aurceive/gcsim.git
 	branch = wfpsim-custom
 	shallow = true
+[submodule "engines/kqmsim"]
+	path = engines/kqmsim
+	url = https://github.com/KQM-git/kqmsim.git
+	branch = develop
+	shallow = true
