@@ -8,6 +8,7 @@ require (
 )
 
 require (
+	github.com/genshinsim/gcsim/libs/enginebridge v0.0.0
 	github.com/richardlehane/mscfb v1.0.4 // indirect
 	github.com/richardlehane/msoleps v1.0.4 // indirect
 	github.com/tiendc/go-deepcopy v1.7.2 // indirect
@@ -17,3 +18,5 @@ require (
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
 )
+
+replace github.com/genshinsim/gcsim/libs/enginebridge => ../../libs/enginebridge

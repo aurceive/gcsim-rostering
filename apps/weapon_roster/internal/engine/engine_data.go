@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -15,17 +14,13 @@ import (
 	"strings"
 
 	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/domain"
+	"github.com/genshinsim/gcsim/libs/enginebridge"
 	"gopkg.in/yaml.v3"
 )
 
 func LoadData(engineRoot string) (map[string]string, domain.WeaponData, domain.CharacterData, error) {
-	// Read names.generated.json for Russian weapon names
-	namesBytes, err := os.ReadFile(filepath.Join(engineRoot, "ui", "packages", "localization", "src", "locales", "names.generated.json"))
+	namesData, err := enginebridge.LoadGameNames(engineRoot)
 	if err != nil {
-		return nil, domain.WeaponData{}, domain.CharacterData{}, err
-	}
-	var namesData map[string]map[string]map[string]string
-	if err := json.Unmarshal(namesBytes, &namesData); err != nil {
 		return nil, domain.WeaponData{}, domain.CharacterData{}, err
 	}
 
@@ -39,13 +34,9 @@ func LoadData(engineRoot string) (map[string]string, domain.WeaponData, domain.C
 		return nil, domain.WeaponData{}, domain.CharacterData{}, err
 	}
 
-	russian, ok := namesData["Russian"]
+	weaponNames, ok := namesData.Names("Russian", "weapon_names")
 	if !ok {
-		return nil, domain.WeaponData{}, domain.CharacterData{}, fmt.Errorf("names.generated.json: missing Russian locale")
-	}
-	weaponNames, ok := russian["weapon_names"]
-	if !ok {
-		return nil, domain.WeaponData{}, domain.CharacterData{}, fmt.Errorf("names.generated.json: missing Russian.weapon_names")
+		return nil, domain.WeaponData{}, domain.CharacterData{}, fmt.Errorf("game names: missing Russian.weapon_names")
 	}
 
 	for key := range weaponData.Data {
@@ -66,14 +57,40 @@ type characterPackageConfig struct {
 }
 
 func loadRegisteredWeaponData(engineRoot string) (domain.WeaponData, error) {
-	importsPath := filepath.Join(engineRoot, "pkg", "simulation", "imports.go")
+	data := domain.WeaponData{Data: make(map[string]domain.Weapon)}
+	importsPaths := []string{
+		filepath.Join(engineRoot, "pkg", "simulation", "imports.go"),
+		filepath.Join(engineRoot, "pkg", "simulation", "imports.weapon.dm.go"),
+	}
+	foundImports := false
+	for _, importsPath := range importsPaths {
+		if _, err := os.Stat(importsPath); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return domain.WeaponData{}, fmt.Errorf("stat weapon registrations %q: %w", importsPath, err)
+		}
+		foundImports = true
+		if err := addRegisteredWeaponsFromImports(engineRoot, importsPath, data.Data); err != nil {
+			return domain.WeaponData{}, err
+		}
+	}
+	if !foundImports {
+		return domain.WeaponData{}, fmt.Errorf("weapon registration files not found in %q", filepath.Join(engineRoot, "pkg", "simulation"))
+	}
+	if len(data.Data) == 0 {
+		return domain.WeaponData{}, fmt.Errorf("no registered weapon packages found in %q", filepath.Join(engineRoot, "pkg", "simulation"))
+	}
+	return data, nil
+}
+
+func addRegisteredWeaponsFromImports(engineRoot, importsPath string, weapons map[string]domain.Weapon) error {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, importsPath, nil, 0)
 	if err != nil {
-		return domain.WeaponData{}, fmt.Errorf("parse weapon registrations %q: %w", importsPath, err)
+		return fmt.Errorf("parse weapon registrations %q: %w", importsPath, err)
 	}
 
-	data := domain.WeaponData{Data: make(map[string]domain.Weapon)}
 	for _, decl := range f.Decls {
 		gen, ok := decl.(*ast.GenDecl)
 		if !ok || gen.Tok != token.IMPORT {
@@ -86,7 +103,7 @@ func loadRegisteredWeaponData(engineRoot string) (domain.WeaponData, error) {
 			}
 			importPath, err := strconv.Unquote(importSpec.Path.Value)
 			if err != nil {
-				return domain.WeaponData{}, fmt.Errorf("invalid import path in %q: %w", importsPath, err)
+				return fmt.Errorf("invalid import path in %q: %w", importsPath, err)
 			}
 			class, packageName, ok := weaponPackagePath(importPath)
 			if !ok {
@@ -94,18 +111,15 @@ func loadRegisteredWeaponData(engineRoot string) (domain.WeaponData, error) {
 			}
 			weapon, err := loadWeaponPackage(engineRoot, class, packageName)
 			if err != nil {
-				return domain.WeaponData{}, err
+				return err
 			}
-			if _, exists := data.Data[weapon.Key]; exists {
-				return domain.WeaponData{}, fmt.Errorf("duplicate registered weapon key %q", weapon.Key)
+			if _, exists := weapons[weapon.Key]; exists {
+				return fmt.Errorf("duplicate registered weapon key %q", weapon.Key)
 			}
-			data.Data[weapon.Key] = weapon
+			weapons[weapon.Key] = weapon
 		}
 	}
-	if len(data.Data) == 0 {
-		return domain.WeaponData{}, fmt.Errorf("no registered weapon packages found in %q", importsPath)
-	}
-	return data, nil
+	return nil
 }
 
 func LoadWeaponAliases(engineRoot string) (map[string]string, error) {

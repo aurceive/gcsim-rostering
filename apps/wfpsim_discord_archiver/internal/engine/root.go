@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/genshinsim/gcsim/libs/enginebridge"
 )
 
 func FindRepoRoot() (string, error) {
@@ -40,38 +42,12 @@ func ResolveRoot(appRoot, engineName, enginePath string) (string, error) {
 	enginePath = strings.TrimSpace(enginePath)
 	engineName = strings.TrimSpace(engineName)
 
-	probeRel := filepath.Join("pkg", "shortcut", "characters.go")
-
-	if enginePath != "" {
-		root := filepath.Clean(enginePath)
-		probe := filepath.Join(root, probeRel)
-		if _, err := os.Stat(probe); err != nil {
-			return "", errInvalidEngine(root, probe)
-		}
-		return root, nil
-	}
-
-	if engineName == "" {
+	if engineName == "" && enginePath == "" {
 		return "", errors.New("engine is required when enginePath is not set")
 	}
 
-	root := filepath.Join(appRoot, "engines", engineName)
-	probe := filepath.Join(root, probeRel)
-	if _, err := os.Stat(probe); err != nil {
-		return "", errInvalidEngine(root, probe)
-	}
-	return root, nil
-}
-
-func errInvalidEngine(root, probe string) error {
-	return &EngineRootError{Root: root, Probe: probe}
-}
-
-type EngineRootError struct {
-	Root  string
-	Probe string
-}
-
-func (e *EngineRootError) Error() string {
-	return "engine root does not look valid: missing " + e.Probe + " (root=" + e.Root + ")"
+	return enginebridge.ResolveRoot(appRoot, engineName, enginePath,
+		filepath.Join("pkg", "shortcut", "characters.go"),
+		filepath.Join("pkg", "shortcut", "character.dm.go"),
+	)
 }

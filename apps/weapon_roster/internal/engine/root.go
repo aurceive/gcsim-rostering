@@ -2,30 +2,19 @@ package engine
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/domain"
+	"github.com/genshinsim/gcsim/libs/enginebridge"
 )
 
 func ResolveRoot(appRoot string, cfg domain.Config) (string, error) {
-	if strings.TrimSpace(cfg.EnginePath) != "" {
-		root := filepath.Clean(cfg.EnginePath)
-		probe := filepath.Join(root, "pkg", "simulation", "imports.go")
-		if _, err := os.Stat(probe); err != nil {
-			return "", fmt.Errorf("engine_path=%q does not look like a gcsim repo (missing %s)", root, probe)
-		}
-		return root, nil
-	}
-	engine := strings.TrimSpace(cfg.Engine)
-	if engine == "" {
-		engine = "gcsim"
-	}
-	root := filepath.Join(appRoot, "engines", engine)
-	probe := filepath.Join(root, "pkg", "simulation", "imports.go")
-	if _, err := os.Stat(probe); err != nil {
-		return "", fmt.Errorf("engine=%q not found or invalid at %q (missing %s)", engine, root, probe)
+	root, err := enginebridge.ResolveRoot(appRoot, cfg.Engine, cfg.EnginePath,
+		filepath.Join("pkg", "simulation", "imports.go"),
+		filepath.Join("pkg", "simulation", "imports.weapon.dm.go"),
+	)
+	if err != nil {
+		return "", fmt.Errorf("resolve engine root: %w", err)
 	}
 	return root, nil
 }

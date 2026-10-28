@@ -1,16 +1,14 @@
 package sim
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
+
+	"github.com/genshinsim/gcsim/libs/enginebridge"
 )
 
 // SimulationRunner abstracts a simulation engine.
@@ -46,7 +44,7 @@ type CLIRunner struct {
 }
 
 func (r CLIRunner) OptimizeAndRun(ctx context.Context, configPath string, substatOptions string) (*SimulationResult, error) {
-	engineExe, err := resolveEngineCLI(r.EngineRoot)
+	engineExe, err := enginebridge.CLIPath(r.EngineRoot, "gcsim.exe")
 	if err != nil {
 		return nil, err
 	}
@@ -62,27 +60,8 @@ func (r CLIRunner) OptimizeAndRun(ctx context.Context, configPath string, substa
 	if strings.TrimSpace(substatOptions) != "" {
 		args = append(args, "-options", strings.TrimSpace(substatOptions))
 	}
-	cmd := exec.CommandContext(ctx, engineExe, args...)
-	cmd.Dir = r.EngineRoot
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	start := time.Now()
-	err = cmd.Run()
-	elapsed := time.Since(start)
-	if err != nil {
-		msg := fmt.Sprintf("engine CLI failed after %s: %v", elapsed.Round(time.Millisecond), err)
-		out := bytes.TrimSpace(append(stdout.Bytes(), stderr.Bytes()...))
-		if len(out) > 0 {
-			const max = 16 * 1024
-			if len(out) > max {
-				out = append(out[:max], []byte("\n...<truncated>\n")...)
-			}
-			msg += "\n" + string(out)
-		}
-		return nil, errors.New(msg)
+	if _, err := enginebridge.RunCLI(ctx, engineExe, r.EngineRoot, args...); err != nil {
+		return nil, err
 	}
 
 	b, err := os.ReadFile(outPath)
@@ -101,19 +80,4 @@ func (r CLIRunner) OptimizeAndRun(ctx context.Context, configPath string, substa
 		return nil, fmt.Errorf("engine result missing config_file (%q)", outPath)
 	}
 	return &res, nil
-}
-
-func resolveEngineCLI(engineRoot string) (string, error) {
-	if engineRoot == "" {
-		return "", fmt.Errorf("engine root is empty")
-	}
-	parent := filepath.Dir(engineRoot)
-	if filepath.Base(parent) == "engines" {
-		bins := filepath.Join(parent, "bins", filepath.Base(engineRoot), "gcsim.exe")
-		if _, err := os.Stat(bins); err == nil {
-			return bins, nil
-		}
-		return "", fmt.Errorf("cannot find engine CLI at %q (run scripts/engines/bootstrap.ps1)", bins)
-	}
-	return "", fmt.Errorf("engine root %q is not under an 'engines' directory; cannot derive engines/bins path", engineRoot)
 }

@@ -44,6 +44,38 @@ func TestLoadRegisteredWeaponData_UsesConfigKeyWithMismatchedTextprotoKey(t *tes
 	}
 }
 
+func TestLoadRegisteredWeaponData_UsesWeaponDMImports(t *testing.T) {
+	root := t.TempDir()
+	importsPath := filepath.Join(root, "pkg", "simulation", "imports.weapon.dm.go")
+	if err := os.MkdirAll(filepath.Dir(importsPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	imports := "package simulation\n\nimport _ \"github.com/genshinsim/gcsim/internal/weapons/sword/example\"\n"
+	if err := os.WriteFile(importsPath, []byte(imports), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	weaponDir := filepath.Join(root, "internal", "weapons", "sword", "example")
+	if err := os.MkdirAll(weaponDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(weaponDir, "config.yml"), []byte("key: registered-key\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	data := "key: \"registered-key\"\nrarity: 5\nweapon_class: WEAPON_SWORD_ONE_HAND\n"
+	if err := os.WriteFile(filepath.Join(weaponDir, "data_gen.textproto"), []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := loadRegisteredWeaponData(root)
+	if err != nil {
+		t.Fatalf("loadRegisteredWeaponData() error = %v", err)
+	}
+	if _, ok := got.Data["registered-key"]; !ok {
+		t.Fatalf("registered weapon missing from DM import file: %#v", got.Data)
+	}
+}
+
 func TestLoadRegisteredWeaponData_WFPSimIncludesExaiphanesblade(t *testing.T) {
 	root := filepath.Clean(filepath.Join("..", "..", "..", "..", "engines", "wfpsim"))
 	got, err := loadRegisteredWeaponData(root)

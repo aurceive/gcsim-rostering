@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -23,6 +24,12 @@ func LoadFromEngineRoot(engineRoot string) (*Resolver, error) {
 	}
 
 	path := filepath.Join(engineRoot, "pkg", "shortcut", "characters.go")
+	if _, err := os.Stat(path); err != nil {
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("inspect engine shortcut file %s: %w", path, err)
+		}
+		path = filepath.Join(engineRoot, "pkg", "shortcut", "character.dm.go")
+	}
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, path, nil, 0)
 	if err != nil {
