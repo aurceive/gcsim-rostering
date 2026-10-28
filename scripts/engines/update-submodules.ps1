@@ -1,5 +1,6 @@
 [CmdletBinding()]
 param(
+  [string]$Engine = 'all',
   [switch]$Shallow,
   [switch]$MaxThin
 )
@@ -8,12 +9,20 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+. (Join-Path $PSScriptRoot 'engine-common.ps1')
 Push-Location $repoRoot
 
 try {
   if (-not (Test-Path (Join-Path $repoRoot '.git'))) {
     throw "Not a git repository: $repoRoot"
   }
+
+  $engineDirs = @(Get-EngineDirs -Engine $Engine -RepoRoot $repoRoot)
+  $selectedPaths = @(
+    foreach ($engineDir in $engineDirs) {
+      "engines/$(Split-Path $engineDir -Leaf)"
+    }
+  )
 
   if (-not $PSBoundParameters.ContainsKey('Shallow')) { $Shallow = $true }
 
@@ -49,15 +58,31 @@ try {
     return ($paths | Sort-Object -Unique)
   }
 
-  # Ensure submodule URLs/branches match .gitmodules
-  Invoke-Git @('submodule', 'sync', '--recursive')
+  # Ensure selected engine URLs/branches match .gitmodules.
+  $syncArgs = @('submodule', 'sync', '--recursive', '--') + $selectedPaths
+  Invoke-Git $syncArgs
 
-  # Init any submodules not yet cloned
+  # Initialize and update only the selected engine submodules.
   $initArgs = @('submodule', 'update', '--init', '--recursive')
   if ($Shallow) { $initArgs += @('--depth', '1', '--recommend-shallow') }
+  $initArgs += @('--') + $selectedPaths
   Invoke-Git $initArgs
 
-  foreach ($subPath in (Get-SubmodulePaths)) {
+  $selectedSubmodulePaths = @(
+    foreach ($subPath in (Get-SubmodulePaths)) {
+      foreach ($enginePath in $selectedPaths) {
+        if (
+          $subPath -eq $enginePath -or
+          $subPath.StartsWith("$enginePath/", [System.StringComparison]::OrdinalIgnoreCase)
+        ) {
+          $subPath
+          break
+        }
+      }
+    }
+  )
+
+  foreach ($subPath in $selectedSubmodulePaths) {
     $fullPath = Join-Path $repoRoot $subPath
     if (-not (Test-Path -LiteralPath $fullPath)) { continue }
 

@@ -47,7 +47,7 @@ $buildEngineClisScript = Join-Path $PSScriptRoot 'build-engine-clis.ps1'
 if ($UpdateSubmodules) {
   Assert-Command -Name 'git'
   Write-Host "==> Update submodules"
-  & $updateSubmodulesScript
+  & $updateSubmodulesScript -Engine $Engine
 }
 
 if ($DownloadModules) {

@@ -57,7 +57,7 @@ $buildEngineClisScript = Join-Path $PSScriptRoot 'build-engine-clis.ps1'
 Push-Location $repoRoot
 try {
   Invoke-Step -Title 'Update submodules' -Action {
-    & $updateSubmodulesScript -MaxThin:$MaxThin
+    & $updateSubmodulesScript -Engine $Engine -MaxThin:$MaxThin
   }
 
   Invoke-Step -Title 'Download engine Go modules' -Action {

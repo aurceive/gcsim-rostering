@@ -19,7 +19,13 @@ git submodule sync --recursive
 git submodule update --init --recursive --depth 1 --recommend-shallow
 ```
 
-Чтобы обновить рабочие копии до веток, настроенных в `.gitmodules`, используйте `scripts/engines/update-submodules.ps1`. Например, движок может быть подключён с ветки `develop` или `main`; актуальная настройка находится в `.gitmodules`.
+Чтобы обновить только один движок до ветки, настроенной в `.gitmodules`, передайте его имя:
+
+```powershell
+scripts/engines/update-submodules.ps1 -Engine kqmsim
+```
+
+Без `-Engine` обновляются все настроенные движки. Например, движок может быть подключён с ветки `develop` или `main`; актуальная настройка находится в `.gitmodules`.
 
 ## Go-зависимости и сборка CLI
 
@@ -39,7 +45,7 @@ scripts/engines/build-engine-clis.ps1 -Engine wfpsim -Targets gcsim,server
 scripts/engines/bootstrap.ps1 -Engine gcsim -Targets gcsim,repl,server
 ```
 
-`bootstrap.ps1` по умолчанию обновляет все submodule, но загружает зависимости и собирает CLI только для выбранного движка (`gcsim` по умолчанию). Используйте `-Engine all`, чтобы выбрать все настроенные движки.
+`-Engine` применяется одинаково к обновлению submodule, загрузке Go-зависимостей и сборке CLI. По умолчанию используется `all`, поэтому запуск без параметров обрабатывает все настроенные движки. Чтобы ограничить все этапы одним движком, например, используйте `-Engine kqmsim`.
 
 Результат сборки сохраняется вне каталогов submodule:
 
