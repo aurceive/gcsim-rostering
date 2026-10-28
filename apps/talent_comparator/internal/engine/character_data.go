@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/genshinsim/gcsim/libs/enginebridge"
 	"gopkg.in/yaml.v3"
 )
 
@@ -20,11 +22,21 @@ type CharacterData struct {
 }
 
 type characterPackageConfig struct {
-	Key string `yaml:"key"`
+	Key  string `yaml:"key"`
+	Name string `yaml:"name"`
+}
+
+type dmCharacterData struct {
+	Key         string `json:"key"`
+	WeaponClass string `json:"weapon_class"`
 }
 
 func LoadRegisteredCharacterData(engineRoot string) (CharacterData, error) {
 	root := filepath.Join(engineRoot, "internal", "characters")
+	dmCharacters, _, err := enginebridge.LoadDMDataIfPresent[dmCharacterData](engineRoot, "character")
+	if err != nil {
+		return CharacterData{}, fmt.Errorf("load DM character data: %w", err)
+	}
 	data := CharacterData{Data: make(map[string]Character)}
 	if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -35,12 +47,13 @@ func LoadRegisteredCharacterData(engineRoot string) (CharacterData, error) {
 		}
 		dir := filepath.Dir(path)
 		if _, err := os.Stat(filepath.Join(dir, "data_gen.textproto")); err != nil {
-			if os.IsNotExist(err) {
+			if os.IsNotExist(err) && len(dmCharacters) == 0 {
 				return nil
+			} else if !os.IsNotExist(err) {
+				return fmt.Errorf("stat registered character data %q: %w", filepath.Join(dir, "data_gen.textproto"), err)
 			}
-			return err
 		}
-		char, err := loadCharacterPackage(dir)
+		char, err := loadCharacterPackage(dir, dmCharacters)
 		if err != nil {
 			return err
 		}
@@ -59,7 +72,7 @@ func LoadRegisteredCharacterData(engineRoot string) (CharacterData, error) {
 	return data, nil
 }
 
-func loadCharacterPackage(dir string) (Character, error) {
+func loadCharacterPackage(dir string, dmCharacters map[string]dmCharacterData) (Character, error) {
 	configPath := filepath.Join(dir, "config.yml")
 	configBytes, err := os.ReadFile(configPath)
 	if err != nil {
@@ -71,9 +84,28 @@ func loadCharacterPackage(dir string) (Character, error) {
 	}
 	key := strings.TrimSpace(config.Key)
 	if key == "" {
-		return Character{}, fmt.Errorf("registered character config %q has an empty key", configPath)
+		key = strings.TrimSpace(config.Name)
 	}
-	weaponClass, err := parseCharacterTextproto(filepath.Join(dir, "data_gen.textproto"))
+	if key == "" {
+		return Character{}, fmt.Errorf("registered character config %q has no key or name", configPath)
+	}
+	dataPath := filepath.Join(dir, "data_gen.textproto")
+	if _, err := os.Stat(dataPath); os.IsNotExist(err) {
+		char, ok := dmCharacters[key]
+		if !ok {
+			return Character{}, fmt.Errorf("registered character %q has no data_gen.textproto or matching character.dm.json entry", key)
+		}
+		if char.Key != "" && char.Key != key {
+			return Character{}, fmt.Errorf("registered character %q: character.dm.json key is %q", key, char.Key)
+		}
+		if char.WeaponClass == "" {
+			return Character{}, fmt.Errorf("registered character %q has no weapon_class in character.dm.json", key)
+		}
+		return Character{Key: key, WeaponClass: char.WeaponClass}, nil
+	} else if err != nil {
+		return Character{}, fmt.Errorf("inspect registered character data %q: %w", dataPath, err)
+	}
+	weaponClass, err := parseCharacterTextproto(dataPath)
 	if err != nil {
 		return Character{}, err
 	}

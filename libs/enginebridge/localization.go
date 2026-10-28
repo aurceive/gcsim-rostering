@@ -37,6 +37,45 @@ func LoadGameNames(engineRoot string) (Catalog, error) {
 	return catalog, nil
 }
 
+func LoadDMData[T any](engineRoot, dataName string) (map[string]T, error) {
+	data, found, err := LoadDMDataIfPresent[T](engineRoot, dataName)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, fmt.Errorf("DM data %q not found under %q", dataName, filepath.Join(engineRoot, "ui", "packages"))
+	}
+	return data, nil
+}
+
+func LoadDMDataIfPresent[T any](engineRoot, dataName string) (map[string]T, bool, error) {
+	candidates := []string{
+		filepath.Join(engineRoot, "ui", "packages", "ui", "src", "data", dataName+".dm.json"),
+		filepath.Join(engineRoot, "ui", "packages", "ui", "src", "Data", dataName+".dm.json"),
+		filepath.Join(engineRoot, "ui", "packages", "db", "src", "Data", dataName+".dm.json"),
+	}
+	for _, path := range candidates {
+		if _, err := os.Stat(path); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, false, fmt.Errorf("inspect DM data %q: %w", path, err)
+		}
+
+		var wrapper struct {
+			Data map[string]T `json:"data"`
+		}
+		if err := readJSON(path, &wrapper); err != nil {
+			return nil, false, fmt.Errorf("load DM data %q: %w", path, err)
+		}
+		if wrapper.Data == nil {
+			return nil, false, fmt.Errorf("load DM data %q: missing data object", path)
+		}
+		return wrapper.Data, true, nil
+	}
+	return nil, false, nil
+}
+
 func (c Catalog) Names(locale, category string) (map[string]string, bool) {
 	localeData, ok := c[locale]
 	if !ok {

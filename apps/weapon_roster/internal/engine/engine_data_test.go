@@ -91,6 +91,41 @@ func TestLoadRegisteredWeaponData_WFPSimIncludesExaiphanesblade(t *testing.T) {
 	}
 }
 
+func TestLoadRegisteredData_KQMSimUsesDMMetadata(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", "..", "..", "..", "engines", "kqmsim"))
+	weaponNames, _, _, err := LoadData(root)
+	if err != nil {
+		t.Fatalf("LoadData(%q) error = %v", root, err)
+	}
+	if weaponNames["thealleyflash"] == "" {
+		t.Fatal("KQM Russian weapon name missing")
+	}
+
+	weapons, err := loadRegisteredWeaponData(root)
+	if err != nil {
+		t.Fatalf("loadRegisteredWeaponData(%q) error = %v", root, err)
+	}
+	weapon, ok := weapons.Data["thealleyflash"]
+	if !ok {
+		t.Fatal("thealleyflash missing from KQM registered weapons")
+	}
+	if weapon.Rarity != 4 || weapon.WeaponClass != "WEAPON_SWORD_ONE_HAND" {
+		t.Fatalf("unexpected KQM weapon metadata: %#v", weapon)
+	}
+
+	characters, err := loadRegisteredCharacterData(root)
+	if err != nil {
+		t.Fatalf("loadRegisteredCharacterData(%q) error = %v", root, err)
+	}
+	character, ok := characters.Data["albedo"]
+	if !ok {
+		t.Fatal("albedo missing from KQM registered characters")
+	}
+	if character.WeaponClass != "WEAPON_SWORD_ONE_HAND" {
+		t.Fatalf("unexpected KQM character metadata: %#v", character)
+	}
+}
+
 func TestLoadWeaponAliases_WFPSimIncludesTTDS(t *testing.T) {
 	root := filepath.Clean(filepath.Join("..", "..", "..", "..", "engines", "wfpsim"))
 	got, err := LoadWeaponAliases(root)

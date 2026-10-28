@@ -49,15 +49,32 @@ func LoadData(engineRoot string) (map[string]string, domain.WeaponData, domain.C
 }
 
 type weaponPackageConfig struct {
-	Key string `yaml:"key"`
+	Key  string `yaml:"key"`
+	Name string `yaml:"name"`
 }
 
 type characterPackageConfig struct {
-	Key string `yaml:"key"`
+	Key  string `yaml:"key"`
+	Name string `yaml:"name"`
+}
+
+type dmWeaponData struct {
+	Key         string `json:"key"`
+	Rarity      int    `json:"rarity"`
+	WeaponClass string `json:"weapon_class"`
+}
+
+type dmCharacterData struct {
+	Key         string `json:"key"`
+	WeaponClass string `json:"weapon_class"`
 }
 
 func loadRegisteredWeaponData(engineRoot string) (domain.WeaponData, error) {
 	data := domain.WeaponData{Data: make(map[string]domain.Weapon)}
+	dmWeapons, _, err := enginebridge.LoadDMDataIfPresent[dmWeaponData](engineRoot, "weapon")
+	if err != nil {
+		return domain.WeaponData{}, fmt.Errorf("load DM weapon data: %w", err)
+	}
 	importsPaths := []string{
 		filepath.Join(engineRoot, "pkg", "simulation", "imports.go"),
 		filepath.Join(engineRoot, "pkg", "simulation", "imports.weapon.dm.go"),
@@ -71,7 +88,7 @@ func loadRegisteredWeaponData(engineRoot string) (domain.WeaponData, error) {
 			return domain.WeaponData{}, fmt.Errorf("stat weapon registrations %q: %w", importsPath, err)
 		}
 		foundImports = true
-		if err := addRegisteredWeaponsFromImports(engineRoot, importsPath, data.Data); err != nil {
+		if err := addRegisteredWeaponsFromImports(engineRoot, importsPath, data.Data, dmWeapons); err != nil {
 			return domain.WeaponData{}, err
 		}
 	}
@@ -84,7 +101,7 @@ func loadRegisteredWeaponData(engineRoot string) (domain.WeaponData, error) {
 	return data, nil
 }
 
-func addRegisteredWeaponsFromImports(engineRoot, importsPath string, weapons map[string]domain.Weapon) error {
+func addRegisteredWeaponsFromImports(engineRoot, importsPath string, weapons map[string]domain.Weapon, dmWeapons map[string]dmWeaponData) error {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, importsPath, nil, 0)
 	if err != nil {
@@ -109,7 +126,7 @@ func addRegisteredWeaponsFromImports(engineRoot, importsPath string, weapons map
 			if !ok {
 				continue
 			}
-			weapon, err := loadWeaponPackage(engineRoot, class, packageName)
+			weapon, err := loadWeaponPackage(engineRoot, class, packageName, dmWeapons)
 			if err != nil {
 				return err
 			}
@@ -210,7 +227,7 @@ func weaponPackagePath(importPath string) (string, string, bool) {
 	return parts[0], parts[1], true
 }
 
-func loadWeaponPackage(engineRoot, weaponClass, packageName string) (domain.Weapon, error) {
+func loadWeaponPackage(engineRoot, weaponClass, packageName string, dmWeapons map[string]dmWeaponData) (domain.Weapon, error) {
 	dir := filepath.Join(engineRoot, "internal", "weapons", weaponClass, packageName)
 	configPath := filepath.Join(dir, "config.yml")
 	configBytes, err := os.ReadFile(configPath)
@@ -223,22 +240,45 @@ func loadWeaponPackage(engineRoot, weaponClass, packageName string) (domain.Weap
 	}
 	key := strings.TrimSpace(config.Key)
 	if key == "" {
-		return domain.Weapon{}, fmt.Errorf("registered weapon config %q has an empty key", configPath)
+		key = strings.TrimSpace(config.Name)
+	}
+	if key == "" {
+		return domain.Weapon{}, fmt.Errorf("registered weapon config %q has no key or name", configPath)
 	}
 
-	rarity, textprotoClass, err := parseWeaponTextproto(filepath.Join(dir, "data_gen.textproto"))
-	if err != nil {
-		return domain.Weapon{}, err
-	}
 	expectedClass, ok := weaponClassToProto(weaponClass)
 	if !ok {
 		return domain.Weapon{}, fmt.Errorf("registered weapon %q uses unsupported class directory %q", key, weaponClass)
 	}
-	if textprotoClass != expectedClass {
-		return domain.Weapon{}, fmt.Errorf("registered weapon %q: data_gen.textproto weapon_class=%q does not match directory class %q", key, textprotoClass, weaponClass)
+	dataPath := filepath.Join(dir, "data_gen.textproto")
+	if _, err := os.Stat(dataPath); err == nil {
+		rarity, textprotoClass, err := parseWeaponTextproto(dataPath)
+		if err != nil {
+			return domain.Weapon{}, err
+		}
+		if textprotoClass != expectedClass {
+			return domain.Weapon{}, fmt.Errorf("registered weapon %q: data_gen.textproto weapon_class=%q does not match directory class %q", key, textprotoClass, weaponClass)
+		}
+		return domain.Weapon{Key: key, Rarity: rarity, WeaponClass: textprotoClass}, nil
+	} else if !os.IsNotExist(err) {
+		return domain.Weapon{}, fmt.Errorf("inspect registered weapon data %q: %w", dataPath, err)
 	}
 
-	return domain.Weapon{Key: key, Rarity: rarity, WeaponClass: textprotoClass}, nil
+	dmWeapon, ok := dmWeapons[key]
+	if !ok {
+		return domain.Weapon{}, fmt.Errorf("registered weapon %q has no data_gen.textproto or matching weapon.dm.json entry", key)
+	}
+	if dmWeapon.Key != "" && dmWeapon.Key != key {
+		return domain.Weapon{}, fmt.Errorf("registered weapon %q: weapon.dm.json key is %q", key, dmWeapon.Key)
+	}
+	if dmWeapon.Rarity <= 0 || dmWeapon.WeaponClass == "" {
+		return domain.Weapon{}, fmt.Errorf("registered weapon %q has incomplete weapon.dm.json metadata", key)
+	}
+	if dmWeapon.WeaponClass != expectedClass {
+		return domain.Weapon{}, fmt.Errorf("registered weapon %q: weapon.dm.json weapon_class=%q does not match directory class %q", key, dmWeapon.WeaponClass, weaponClass)
+	}
+
+	return domain.Weapon{Key: key, Rarity: dmWeapon.Rarity, WeaponClass: dmWeapon.WeaponClass}, nil
 }
 
 func parseWeaponTextproto(path string) (int, string, error) {
@@ -271,12 +311,25 @@ func parseWeaponTextproto(path string) (int, string, error) {
 
 func loadRegisteredCharacterData(engineRoot string) (domain.CharacterData, error) {
 	root := filepath.Join(engineRoot, "internal", "characters")
-	importsPath := filepath.Join(engineRoot, "pkg", "simulation", "imports_char_gen.go")
-	if _, err := os.Stat(importsPath); err != nil {
-		if !os.IsNotExist(err) {
-			return domain.CharacterData{}, fmt.Errorf("stat character registrations %q: %w", importsPath, err)
+	dmCharacters, _, err := enginebridge.LoadDMDataIfPresent[dmCharacterData](engineRoot, "character")
+	if err != nil {
+		return domain.CharacterData{}, fmt.Errorf("load DM character data: %w", err)
+	}
+	importsPaths := []string{
+		filepath.Join(engineRoot, "pkg", "simulation", "imports_char_gen.go"),
+		filepath.Join(engineRoot, "pkg", "simulation", "imports.character.dm.go"),
+	}
+	var importsPath string
+	for _, candidate := range importsPaths {
+		if _, err := os.Stat(candidate); err == nil {
+			importsPath = candidate
+			break
+		} else if !os.IsNotExist(err) {
+			return domain.CharacterData{}, fmt.Errorf("stat character registrations %q: %w", candidate, err)
 		}
-		return loadCharacterDataFromConfigs(root)
+	}
+	if importsPath == "" {
+		return loadCharacterDataFromConfigs(root, dmCharacters)
 	}
 
 	fset := token.NewFileSet()
@@ -305,7 +358,7 @@ func loadRegisteredCharacterData(engineRoot string) (domain.CharacterData, error
 				continue
 			}
 			charDir := filepath.Join(root, filepath.FromSlash(packagePath))
-			char, err := loadCharacterPackage(charDir)
+			char, err := loadCharacterPackage(charDir, dmCharacters)
 			if err != nil {
 				return domain.CharacterData{}, fmt.Errorf("load registered character %q: %w", importPath, err)
 			}
@@ -341,7 +394,7 @@ func characterPackagePath(importPath string) (string, bool) {
 	return packagePath, true
 }
 
-func loadCharacterDataFromConfigs(root string) (domain.CharacterData, error) {
+func loadCharacterDataFromConfigs(root string, dmCharacters map[string]dmCharacterData) (domain.CharacterData, error) {
 	data := domain.CharacterData{Data: make(map[string]domain.Character)}
 	if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -353,12 +406,13 @@ func loadCharacterDataFromConfigs(root string) (domain.CharacterData, error) {
 		dir := filepath.Dir(path)
 		dataPath := filepath.Join(dir, "data_gen.textproto")
 		if _, err := os.Stat(dataPath); err != nil {
-			if os.IsNotExist(err) {
+			if os.IsNotExist(err) && len(dmCharacters) == 0 {
 				return nil
+			} else if !os.IsNotExist(err) {
+				return fmt.Errorf("stat character data %q: %w", dataPath, err)
 			}
-			return fmt.Errorf("stat character data %q: %w", dataPath, err)
 		}
-		char, err := loadCharacterPackage(dir)
+		char, err := loadCharacterPackage(dir, dmCharacters)
 		if err != nil {
 			return err
 		}
@@ -377,7 +431,7 @@ func loadCharacterDataFromConfigs(root string) (domain.CharacterData, error) {
 	return data, nil
 }
 
-func loadCharacterPackage(dir string) (domain.Character, error) {
+func loadCharacterPackage(dir string, dmCharacters map[string]dmCharacterData) (domain.Character, error) {
 	configPath := filepath.Join(dir, "config.yml")
 	var key string
 	configBytes, err := os.ReadFile(configPath)
@@ -388,13 +442,31 @@ func loadCharacterPackage(dir string) (domain.Character, error) {
 		}
 		key = strings.TrimSpace(config.Key)
 		if key == "" {
-			return domain.Character{}, fmt.Errorf("registered character config %q has an empty key", configPath)
+			key = strings.TrimSpace(config.Name)
+		}
+		if key == "" {
+			return domain.Character{}, fmt.Errorf("registered character config %q has no key or name", configPath)
 		}
 	} else if !os.IsNotExist(err) {
 		return domain.Character{}, fmt.Errorf("read registered character config %q: %w", configPath, err)
 	}
 
 	dataPath := filepath.Join(dir, "data_gen.textproto")
+	if _, err := os.Stat(dataPath); os.IsNotExist(err) {
+		char, ok := dmCharacters[key]
+		if !ok {
+			return domain.Character{}, fmt.Errorf("registered character %q has no data_gen.textproto or matching character.dm.json entry", key)
+		}
+		if char.Key != "" && char.Key != key {
+			return domain.Character{}, fmt.Errorf("registered character %q: character.dm.json key is %q", key, char.Key)
+		}
+		if char.WeaponClass == "" {
+			return domain.Character{}, fmt.Errorf("registered character %q has no weapon_class in character.dm.json", key)
+		}
+		return domain.Character{Key: key, WeaponClass: char.WeaponClass}, nil
+	} else if err != nil {
+		return domain.Character{}, fmt.Errorf("inspect registered character data %q: %w", dataPath, err)
+	}
 	textprotoKey, weaponClass, err := parseCharacterTextproto(dataPath)
 	if err != nil {
 		return domain.Character{}, err

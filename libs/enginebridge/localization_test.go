@@ -80,6 +80,27 @@ func TestLoadGameNamesKQMSim(t *testing.T) {
 	}
 }
 
+func TestLoadDMDataReadsLowercaseDataDirectory(t *testing.T) {
+	root := t.TempDir()
+	dataPath := filepath.Join(root, "ui", "packages", "ui", "src", "data", "weapon.dm.json")
+	if err := os.MkdirAll(filepath.Dir(dataPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFixture(t, dataPath, `{"data":{"weapon":{"key":"weapon","rarity":5}}}`)
+
+	type weapon struct {
+		Key    string `json:"key"`
+		Rarity int    `json:"rarity"`
+	}
+	got, err := LoadDMData[weapon](root, "weapon")
+	if err != nil {
+		t.Fatalf("LoadDMData() error = %v", err)
+	}
+	if got["weapon"].Rarity != 5 {
+		t.Fatalf("unexpected DM weapon data: %#v", got)
+	}
+}
+
 func writeFixture(t *testing.T, path, contents string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {

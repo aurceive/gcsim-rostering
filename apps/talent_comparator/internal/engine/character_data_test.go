@@ -25,6 +25,21 @@ func TestLoadRegisteredCharacterData_WFPSimIncludesTravelerCryoAlias(t *testing.
 	}
 }
 
+func TestLoadRegisteredCharacterData_KQMSimUsesDMData(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", "..", "..", "..", "engines", "kqmsim"))
+	got, err := LoadRegisteredCharacterData(root)
+	if err != nil {
+		t.Fatalf("LoadRegisteredCharacterData(%q) error = %v", root, err)
+	}
+	char, ok := got.Data["albedo"]
+	if !ok {
+		t.Fatal("albedo missing from KQM registered characters")
+	}
+	if char.WeaponClass != "WEAPON_SWORD_ONE_HAND" {
+		t.Fatalf("unexpected KQM character metadata: %#v", char)
+	}
+}
+
 func TestLoadRegisteredCharacterData_UsesConfigKeyAndAddsTravelerAliases(t *testing.T) {
 	root := t.TempDir()
 	charDir := filepath.Join(root, "internal", "characters", "traveler", "cryo", "lumine")

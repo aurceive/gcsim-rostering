@@ -38,5 +38,9 @@ func dirExists(path string) bool {
 }
 
 func ResolveRoot(appRoot, engineName, enginePath string) (string, error) {
-	return enginebridge.ResolveRoot(appRoot, engineName, enginePath, filepath.Join("ui", "packages", "ui", "src", "Data", "weapon_data.generated.json"))
+	return enginebridge.ResolveRoot(appRoot, engineName, enginePath,
+		filepath.Join("ui", "packages", "ui", "src", "Data", "weapon_data.generated.json"),
+		filepath.Join("ui", "packages", "ui", "src", "data", "weapon.dm.json"),
+		filepath.Join("ui", "packages", "db", "src", "Data", "weapon.dm.json"),
+	)
 }

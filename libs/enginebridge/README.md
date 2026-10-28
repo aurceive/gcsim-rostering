@@ -15,6 +15,7 @@ importing a simulator's Go packages.
 - Read game-name catalogs in either the generated
   `names.generated.json` format or the `names.dm.json` plus
   `names.override.json` format.
+- Load typed DM data catalogs from the UI or DB package data directories.
 
 The package intentionally does not choose CLI flags, parse simulation result
 schemas, or unify every engine's character, weapon, and artifact metadata.
@@ -67,9 +68,25 @@ if !ok {
 _ = weaponNames
 ```
 
+Read a DM catalog without coupling the bridge to an application's domain types:
+
+```go
+type Weapon struct {
+    Key         string `json:"key"`
+    Rarity      int    `json:"rarity"`
+    WeaponClass string `json:"weapon_class"`
+}
+
+weapons, err := enginebridge.LoadDMData[Weapon](root, "weapon")
+if err != nil {
+    return err
+}
+_ = weapons
+```
+
 For the DM format, override entries take precedence over base entries, matching
 the merge used by the engine UI. The generated format is used as-is when its
-file is present.
+file is present. DM data lookup supports the UI and DB package layouts.
 
 ## App integration
 
@@ -86,5 +103,8 @@ replace github.com/genshinsim/gcsim/libs/enginebridge => ../../libs/enginebridge
 Resolving an engine root or running its CLI does not imply its metadata is
 supported by every application. For example, engine branches may expose
 different registration files, pipeline configs, generated data, and
-localization catalogs. Applications should validate the capabilities they
-actually need and return a clear error when a required format is unavailable.
+localization catalogs. `weapon_roster` and `talent_comparator` adapt both older
+`data_gen.textproto` registrations and KQM pipeline configs backed by DM JSON.
+`enka_import` can read either generated JSON or KQM DM JSON data. These are
+application-specific mappings rather than a universal game-data schema;
+applications should return a clear error when required data is unavailable.
