@@ -43,11 +43,14 @@ type process struct {
 
 type Manager struct {
 	processes map[string]*process
+	balances  map[*exec.Cmd]struct{}
+	root      string
 	job       *job
 	workers   int
 	timeout   int
 	log       *log.Logger
 	mu        sync.Mutex
+	balanceWG sync.WaitGroup
 	closed    bool
 }
 
@@ -85,6 +88,10 @@ func Names(root string) ([]string, error) {
 }
 
 func New(root string, workers, timeout int, logger *log.Logger) (*Manager, error) {
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return nil, fmt.Errorf("resolve repository root: %w", err)
+	}
 	names, err := Names(root)
 	if err != nil {
 		return nil, err
@@ -93,7 +100,7 @@ func New(root string, workers, timeout int, logger *log.Logger) (*Manager, error
 	if err != nil {
 		return nil, err
 	}
-	m := &Manager{processes: make(map[string]*process), job: j, workers: workers, timeout: timeout, log: logger}
+	m := &Manager{processes: make(map[string]*process), balances: make(map[*exec.Cmd]struct{}), root: root, job: j, workers: workers, timeout: timeout, log: logger}
 	for _, name := range names {
 		m.processes[name] = &process{name: name, path: filepath.Join(root, "engines", "bins", name, "server.exe")}
 	}
@@ -255,8 +262,9 @@ func (m *Manager) Target(name string) (*url.URL, error) {
 
 func (m *Manager) Close() error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	if m.closed {
+		m.mu.Unlock()
+		m.balanceWG.Wait()
 		return nil
 	}
 	m.closed = true
@@ -270,8 +278,16 @@ func (m *Manager) Close() error {
 		}
 		p.mu.Unlock()
 	}
+	for cmd := range m.balances {
+		delete(m.balances, cmd)
+		if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			errs = append(errs, err)
+		}
+	}
 	if err := m.job.close(); err != nil {
 		errs = append(errs, err)
 	}
+	m.mu.Unlock()
+	m.balanceWG.Wait()
 	return errors.Join(errs...)
 }

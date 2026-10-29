@@ -23,12 +23,14 @@ function EngineWorkspace({
 	visible,
 	config,
 	setConfig,
+	applyBalancedConfig,
 	status,
 }: {
 	name: string;
 	visible: boolean;
 	config: string;
 	setConfig: (value: string) => void;
+	applyBalancedConfig: (original: string, value: string) => boolean;
 	status?: EngineStatus;
 }) {
 	const [started, setStarted] = React.useState(false);
@@ -85,6 +87,8 @@ function EngineWorkspace({
 					exec={supplier}
 					config={config}
 					setConfig={setConfig}
+					applyBalancedConfig={applyBalancedConfig}
+					engine={name}
 					visible={visible}
 				/>
 			)}
@@ -96,10 +100,12 @@ function BrowserWorkspace({
 	visible,
 	config,
 	setConfig,
+	applyBalancedConfig,
 }: {
 	visible: boolean;
 	config: string;
 	setConfig: (value: string) => void;
+	applyBalancedConfig: (original: string, value: string) => boolean;
 }) {
 	const [workers, setWorkers] = useLocalStorage("wasm-num-workers", 3);
 	const executor = React.useMemo(() => new WasmExecutor("/main.wasm"), []);
@@ -113,6 +119,8 @@ function BrowserWorkspace({
 				exec={supplier}
 				config={config}
 				setConfig={setConfig}
+				applyBalancedConfig={applyBalancedConfig}
+				engine="kqmsim"
 				visible={visible}
 			>
 				<label>
@@ -137,6 +145,17 @@ function BrowserWorkspace({
 export default function App() {
 	const [engine, setEngine] = useLocalStorage(selectionKey, "gcsim");
 	const [config, setConfig] = useLocalStorage("cfg", "");
+	const configRef = React.useRef(config);
+	configRef.current = config;
+	const updateConfig = (value: string) => {
+		configRef.current = value;
+		setConfig(value);
+	};
+	const applyBalancedConfig = (original: string, value: string) => {
+		if (configRef.current !== original) return false;
+		updateConfig(value);
+		return true;
+	};
 	const [visited, setVisited] = React.useState<string[]>([]);
 	const [engines, setEngines] = React.useState<EngineStatus[]>([]);
 	const [loadError, setLoadError] = React.useState("");
@@ -228,7 +247,8 @@ export default function App() {
 						key={name}
 						visible={name === engine}
 						config={config}
-						setConfig={setConfig}
+						setConfig={updateConfig}
+						applyBalancedConfig={applyBalancedConfig}
 					/>
 				) : (
 					<EngineWorkspace
@@ -236,7 +256,8 @@ export default function App() {
 						name={name}
 						visible={name === engine}
 						config={config}
-						setConfig={setConfig}
+						setConfig={updateConfig}
+						applyBalancedConfig={applyBalancedConfig}
 						status={engines.find((item) => item.name === name)}
 					/>
 				),

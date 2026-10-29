@@ -27,6 +27,7 @@ import { useLocalStorage } from "@gcsim/utils";
 import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { teamCharacters } from "./characters";
+import { useBalancer } from "./Balancer";
 import { downloadSample } from "./downloadSample";
 
 export function UI({
@@ -35,12 +36,16 @@ export function UI({
 	setConfig,
 	children,
 	visible = true,
+	engine,
+	applyBalancedConfig,
 }: {
 	exec: ExecutorSupplier<Executor>;
 	config?: string;
 	setConfig?: (value: string) => void;
 	children?: ReactNode;
 	visible?: boolean;
+	engine?: string;
+	applyBalancedConfig?: (original: string, value: string) => boolean;
 	gitCommit?: string;
 	mode?: string;
 }) {
@@ -52,6 +57,8 @@ export function UI({
 				setConfig={setConfig ?? setLocalConfig}
 				settings={children}
 				visible={visible}
+				engine={engine}
+				applyBalancedConfig={applyBalancedConfig}
 			/>
 		</ExecutorProvider>
 	);
@@ -62,11 +69,15 @@ function Workspace({
 	setConfig,
 	settings,
 	visible,
+	engine,
+	applyBalancedConfig,
 }: {
 	config: string;
 	setConfig: (value: string) => void;
 	settings?: ReactNode;
 	visible: boolean;
+	engine?: string;
+	applyBalancedConfig?: (original: string, value: string) => boolean;
 }) {
 	const { t } = useTranslation();
 	const { exec, isReady, busy, run, cancel } = useExecutor();
@@ -98,6 +109,7 @@ function Workspace({
 		DefaultSampleOptions,
 	);
 	const data = loaded ?? result;
+	const balancer = useBalancer(engine ?? "", config, applyBalancedConfig ?? (() => false));
 
 	function dismissConfigImport() {
 		setIncomingConfig(null);
@@ -211,9 +223,11 @@ function Workspace({
 					prefs={prefs}
 					onPrefsChange={setPrefs}
 					showThemeSelector
-					canRun={isReady && isValid && !busy}
+					canRun={isReady && isValid && !busy && !balancer.running}
 					busy={!isReady || busy}
 					onRun={start}
+					extraAction={engine && applyBalancedConfig ? balancer.button : null}
+					actionPanel={engine && applyBalancedConfig ? balancer.panel : null}
 					settings={
 						<Button variant="outline" onClick={() => setSettingsOpen(true)}>
 							Settings

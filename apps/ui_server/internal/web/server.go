@@ -89,6 +89,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) startEngine(w http.ResponseWriter, r *http.Request) {
 	name, suffix, ok := strings.Cut(strings.TrimPrefix(r.URL.Path, "/api/engines/"), "/")
+	if ok && suffix == "balance" && r.Method == http.MethodPost {
+		s.balance(w, r, name)
+		return
+	}
 	if !ok || suffix != "start" || r.Method != http.MethodPost {
 		http.NotFound(w, r)
 		return

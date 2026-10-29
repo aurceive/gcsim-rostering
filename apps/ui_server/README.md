@@ -16,15 +16,16 @@ apps\ui_server\ui_server.exe
 ```
 
 Откройте `http://127.0.0.1:54320`. По умолчанию bootstrap собирает `server.exe`
-движка `gcsim`. Чтобы собрать серверы всех подключённых движков:
+и `gcsim.exe` (для балансера)
+движка `gcsim`. Чтобы собрать серверы и CLI всех подключённых движков:
 
 ```powershell
 scripts\ui_server\bootstrap.ps1 -Engine all
 ```
 
 Чтобы оставить существующие бинарники движков без изменений, используйте
-`-SkipEngines`; отдельный сервер можно собрать командой
-`scripts\engines\build-engine-clis.ps1 -Engine kqmsim -Targets server`.
+`-SkipEngines`; отдельно сервер и балансер можно собрать командой
+`scripts\engines\build-engine-clis.ps1 -Engine kqmsim -Targets server,gcsim`.
 Несобранный движок виден в списке, но выдаёт ошибку при запуске.
 
 Параметры `ui_server.exe`: `-port` (54320), `-workers` (10),
@@ -38,6 +39,27 @@ timeout применяются к каждому серверу движка. Д
 В списке также доступен `kqmsim (browser/WASM)` — исходный режим расчёта в
 браузере. Он использует WebAssembly, собранный bootstrap из сабмодуля KQM, а не
 локальный `server.exe`.
+
+## Балансер
+
+Кнопка Balancer передаёт текущий конфиг CLI выбранного движка и показывает
+его stdout и stderr по мере работы. Это оптимизатор сабстатов KQM с настройками
+движка по умолчанию: сначала он подбирает восстановление энергии, затем
+распределение остальных сабстатов для урона и уточняет компромисс между ними.
+Вывод содержит этапы, промежуточные расчёты ER, итоговые строки статов,
+предупреждения и ошибки; подробный режим `-v` не включён.
+
+Используется тот же `-substatOptim`, который запускает `grow_roster` внутри
+`-substatOptimFull`, но без дополнительной симуляции после оптимизации.
+После успешного завершения конфиг заменяется, а окно вывода скрывается.
+Если конфиг изменился во время работы или произошла ошибка, он не заменяется,
+а окно остаётся открытым. При переключении движка работа продолжается в
+исходном режиме; конфиг общий для всех режимов.
+
+В режиме браузерного WebAssembly балансер запускает локальный CLI `kqmsim`,
+поэтому для него тоже нужен `engines\bins\kqmsim\gcsim.exe`. Входной и
+результирующий конфиги находятся во временной папке, удаляемой после работы;
+доступный процесс отменяется при закрытии страницы или завершении сервера.
 
 Сборка сохраняет рабочую копию UI и зависимости в отдельной папке
 `work\ui_server\build-<id>`; это игнорируемые временные файлы. Готовый UI
@@ -71,9 +93,11 @@ $env:UISERVER_INTEGRATION_ROOT = (Get-Location).Path
 go -C apps\ui_server test .\internal\web -run TestRealEngines -count=1 -v
 ```
 
+Для проверки балансеров замените `TestRealEngines` на `TestRealBalancers`.
+
 Тесты адаптера ошибок интерфейса запускаются из папки `ui` последней сборки,
 путь к которой выводит bootstrap:
 
 ```powershell
-corepack pnpm --filter '@gcsim/components' exec vitest run src\Editor\ProviderValidation.test.tsx src\Editor\ExecutorProvider.test.tsx
+corepack pnpm --filter '@gcsim/components' exec vitest run src\Editor\Balancer.test.tsx src\Editor\ProviderValidation.test.tsx src\Editor\ExecutorProvider.test.tsx
 ```

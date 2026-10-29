@@ -33,7 +33,7 @@ if ($status) {
 }
 
 if (-not $SkipEngines) {
-  & (Join-Path $repoRoot 'scripts\engines\build-engine-clis.ps1') -Engine $Engine -Targets @('server')
+  & (Join-Path $repoRoot 'scripts\engines\build-engine-clis.ps1') -Engine $Engine -Targets @('server', 'gcsim')
 }
 
 $stage = Join-Path $repoRoot ("work\ui_server\build-" + [guid]::NewGuid().ToString('N'))
@@ -47,6 +47,26 @@ Assert-NativeSuccess 'Extracting KQM UI'
 $uiRoot = Join-Path $stage 'ui'
 $source = Join-Path $uiRoot 'packages\kqmsim\src'
 Copy-Item -Path (Join-Path $appRoot 'web\src\*.tsx') -Destination $source -Force
+$editorFile = Join-Path $uiRoot 'packages\components\src\Editor\Editor.tsx'
+$editorSource = [IO.File]::ReadAllText($editorFile)
+$editorTypesFile = Join-Path $uiRoot 'packages\components\src\Editor\types.ts'
+$editorTypes = [IO.File]::ReadAllText($editorTypesFile)
+$editorPropsAnchor = "`tsettings?: React.ReactNode;"
+$editorArgAnchor = "`tsettings,"
+$editorPanelAnchor = "`t`t`t`t<div className=`"flex flex-grow basis-full"
+$editorButtonAnchor = "`t`t`t`t`t<Button className=`"flex-1`" onClick={onRun}"
+foreach ($anchor in @($editorPropsAnchor, $editorArgAnchor, $editorPanelAnchor, $editorButtonAnchor)) {
+  $content = if ($anchor -eq $editorPropsAnchor) { $editorTypes } else { $editorSource }
+  if ([regex]::Matches($content, [regex]::Escape($anchor)).Count -ne 1) {
+    throw 'KQM Editor layout changed; update the ui_server build adapter.'
+  }
+}
+$editorTypes = $editorTypes.Replace($editorPropsAnchor, $editorPropsAnchor + "`n`textraAction?: React.ReactNode;`n`tactionPanel?: React.ReactNode;")
+$editorSource = $editorSource.Replace($editorArgAnchor, $editorArgAnchor + "`n`textraAction,`n`tactionPanel,")
+$editorSource = $editorSource.Replace($editorPanelAnchor, "`t`t`t`t{actionPanel}`n" + $editorPanelAnchor)
+$editorSource = $editorSource.Replace($editorButtonAnchor, "`t`t`t`t`t{extraAction}`n" + $editorButtonAnchor)
+[IO.File]::WriteAllText($editorFile, $editorSource, [Text.UTF8Encoding]::new($false))
+[IO.File]::WriteAllText($editorTypesFile, $editorTypes, [Text.UTF8Encoding]::new($false))
 Copy-Item -LiteralPath (Join-Path $appRoot 'web\components\Commit.tsx') -Destination (Join-Path $uiRoot 'packages\components\src\Metadata\Commit.tsx') -Force
 Copy-Item -LiteralPath (Join-Path $appRoot 'web\index.html') -Destination (Join-Path $uiRoot 'packages\kqmsim\index.html') -Force
 $executorFile = Join-Path $uiRoot 'packages\executors\src\ServerExecutor.ts'
@@ -71,6 +91,7 @@ if ([regex]::Matches($providerSource, $pattern).Count -ne 1) {
 $providerSource = [regex]::Replace($providerSource, $pattern, '$1' + "`n`t`t`t`t`tif (validated.errors?.length) setRunResult((prev) => ({ ...prev, config, error: validated.errors?.join(`"\n`") ?? null }));")
 [IO.File]::WriteAllText($providerFile, $providerSource, [Text.UTF8Encoding]::new($false))
 Copy-Item -LiteralPath (Join-Path $appRoot 'web\tests\ProviderValidation.test.tsx') -Destination (Join-Path $uiRoot 'packages\components\src\Editor\ProviderValidation.test.tsx') -Force
+Copy-Item -LiteralPath (Join-Path $appRoot 'web\tests\Balancer.test.tsx') -Destination (Join-Path $uiRoot 'packages\components\src\Editor\Balancer.test.tsx') -Force
 
 Write-Host '==> Build KQM browser WebAssembly'
 $oldGoos = $env:GOOS

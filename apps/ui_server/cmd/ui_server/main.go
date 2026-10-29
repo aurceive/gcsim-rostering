@@ -78,6 +78,11 @@ func run() error {
 		return err
 	}
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
+	defer func() {
+		if err := server.Close(); err != nil {
+			logger.Printf("close HTTP server: %v", err)
+		}
+	}()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go func() {
@@ -86,6 +91,9 @@ func run() error {
 		defer cancel()
 		if err := server.Shutdown(shutdown); err != nil {
 			logger.Printf("HTTP shutdown: %v", err)
+			if err := server.Close(); err != nil {
+				logger.Printf("force HTTP shutdown: %v", err)
+			}
 		}
 	}()
 	logger.Printf("open http://127.0.0.1:%d", *port)
