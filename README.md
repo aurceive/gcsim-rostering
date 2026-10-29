@@ -81,6 +81,7 @@
 - `scripts/engines/launch-server.ps1 -Engine custom`
 - `scripts/engines/launch-server.ps1 -Engine wfpsim-custom`
 - `scripts/engines/launch-server.ps1 -Engine kqmsim`
+- `scripts/engines/launch-server.ps1 -Engine kqmsim-custom`
 
 ### 3 Подключение из браузера
 

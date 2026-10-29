@@ -27,6 +27,8 @@ scripts/engines/update-submodules.ps1 -Engine kqmsim
 
 Без `-Engine` обновляются все настроенные движки. Например, движок может быть подключён с ветки `develop` или `main`; актуальная настройка находится в `.gitmodules`.
 
+`kqmsim` отслеживает upstream-ветку `develop` репозитория KQM, а `kqmsim-custom` — ветку `kqmsim-custom` в форке `aurceive/gcsim`.
+
 ## Go-зависимости и сборка CLI
 
 Скрипты поддерживают имя любого настроенного submodule в `engines/`, а значение `all` выбирает все такие движки. Примеры:
@@ -34,6 +36,9 @@ scripts/engines/update-submodules.ps1 -Engine kqmsim
 ```powershell
 # Инициализировать/обновить submodules, загрузить Go-модули и собрать gcsim CLI выбранного движка
 scripts/engines/bootstrap.ps1 -Engine kqmsim
+
+# То же для пользовательской ветки KQM
+scripts/engines/bootstrap.ps1 -Engine kqmsim-custom
 
 # Собрать стандартные цели для всех настроенных движков
 scripts/engines/build-engine-clis.ps1 -Engine all
@@ -61,6 +66,7 @@ engines/bins/<имя-движка>/<цель>.exe
 
 ```powershell
 scripts/engines/launch-server.ps1 -Engine kqmsim
+scripts/engines/launch-server.ps1 -Engine kqmsim-custom
 scripts/engines/launch-server.ps1 -Engine gcsim -Port 54322 -Workers 4
 ```
 

@@ -23,3 +23,8 @@
 	url = https://github.com/KQM-git/kqmsim.git
 	branch = develop
 	shallow = true
+[submodule "engines/kqmsim-custom"]
+	path = engines/kqmsim-custom
+	url = https://github.com/aurceive/gcsim.git
+	branch = kqmsim-custom
+	shallow = true
