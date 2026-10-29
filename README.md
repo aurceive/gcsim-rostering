@@ -22,6 +22,7 @@
 - wfpsim_discord_archiver: `scripts/wfpsim_discord_archiver/bootstrap.ps1`
 - constellation_comparator: `scripts/constellation_comparator/bootstrap.ps1`
 - talent_comparator: `scripts/talent_comparator/bootstrap.ps1`
+- ui_server: `scripts/ui_server/bootstrap.ps1`
 
 Скрипт приложения:
 
@@ -65,6 +66,10 @@
 
   - основной: `apps/talent_comparator/talent_comparator.exe`
   - на примерах: `apps/talent_comparator/talent_comparator.exe -useExamples`
+
+- ui_server:
+
+  - основной: `apps/ui_server/ui_server.exe`
 
 ## Запуск server mode для движков
 

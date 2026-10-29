@@ -7,3 +7,4 @@
 *.exe
 /*.txt
 /TODO
+/apps/ui_server/web/dist/
