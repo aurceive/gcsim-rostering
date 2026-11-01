@@ -18,6 +18,7 @@ import (
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/config"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/discord"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/engine"
+	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/kqmsim"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/localxlsx"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/shareurl"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/sheetsapi"
@@ -43,6 +44,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 		return fmt.Errorf("load state: %w", err)
 	}
 	st := loaded
+	normalizeProcessedKeys(st.ProcessedKeys)
 	pruneProcessedKeys(&st, 120*24*time.Hour)
 	if cfg.Run.IgnoreStateCheckpoint {
 		fmt.Printf("ignoreStateCheckpoint=true: ignoring channel/search checkpoints (ProcessedKeys still used and saved)\n")
@@ -52,7 +54,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 	st.LastRunStarted = time.Now()
 
 	var dc *discord.Client
-	if cfg.Run.Mode != "googleSheets" {
+	if cfg.Run.Mode == "guildSearch" || cfg.Run.Mode == "channelHistory" {
 		var err2 error
 		dc, err2 = discord.New(cfg.Discord.Token)
 		if err2 != nil {
@@ -78,7 +80,11 @@ func Run(ctx context.Context, cfg config.Config) error {
 	}
 	writer := multiWriter{writers: writers}
 
-	wc := wfpsim.New()
+	wfClient := wfpsim.New()
+	kqmClient := kqmsim.New()
+	fetchShare := func(ref shareurl.ShareRef) (archiveShare, error) {
+		return fetchArchiveShare(ctx, ref, wfClient, kqmClient)
+	}
 
 	var aliasResolver *charalias.Resolver
 	if strings.TrimSpace(cfg.Engine) != "" || strings.TrimSpace(cfg.EnginePath) != "" {
@@ -138,39 +144,38 @@ func Run(ctx context.Context, cfg config.Config) error {
 
 	if cfg.Run.Mode == "urlList" {
 		fmt.Printf("Using run.mode=urlList (%d URLs)\n", len(cfg.Run.URLs))
-		keys := make([]string, 0, len(cfg.Run.URLs))
+		refs := make([]shareurl.ShareRef, 0, len(cfg.Run.URLs))
 		seenInputKeys := make(map[string]struct{}, len(cfg.Run.URLs))
 		for _, u := range cfg.Run.URLs {
 			u = strings.TrimSpace(u)
 			if u == "" {
 				continue
 			}
-			var key string
-			if k, ok := shareurl.ExtractKeyFromURL(u); ok {
-				key = k
-			} else {
-				// Treat bare UUID as key directly.
-				key = strings.ToLower(u)
+			ref, ok := shareurl.ParseInput(u)
+			if !ok {
+				return fmt.Errorf("unsupported share input %q", u)
 			}
-			if _, exists := seenInputKeys[key]; !exists {
-				seenInputKeys[key] = struct{}{}
-				keys = append(keys, key)
+			storageKey := ref.StorageKey()
+			if _, exists := seenInputKeys[storageKey]; !exists {
+				seenInputKeys[storageKey] = struct{}{}
+				refs = append(refs, ref)
 			}
 		}
-		fmt.Printf("Discovered keys: %d\n", len(keys))
-		fmt.Printf("New keys: %d\n", countUnprocessedKeys(keys, st.ProcessedKeys))
+		fmt.Printf("Discovered shares: %d\n", len(refs))
+		fmt.Printf("New shares: %d\n", countUnprocessedShares(refs, st.ProcessedKeys))
 
-		for _, key := range keys {
+		for _, ref := range refs {
+			key := ref.StorageKey()
 			if _, ok := st.ProcessedKeys[key]; ok {
 				continue
 			}
-			fmt.Printf("Fetching share for key %s...\n", key)
-			share, err := wc.FetchShare(ctx, key)
+			fmt.Printf("Fetching %s share %s...\n", ref.Provider, ref.Key)
+			share, err := fetchShare(ref)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "wfpsim fetch failed key=%s err=%v\n", key, err)
+				fmt.Fprintf(os.Stderr, "%s fetch failed key=%s err=%v\n", ref.Provider, ref.Key, err)
 				continue
 			}
-			row, err := buildRowFromKey(key, share, aliasResolver)
+			row, err := buildRow("", nil, ref, share, aliasResolver)
 			if err != nil {
 				return err
 			}
@@ -188,24 +193,25 @@ func Run(ctx context.Context, cfg config.Config) error {
 		fmt.Printf("Using run.mode=googleSheets (source sheet id=%s gid=%s)\n",
 			cfg.Run.GoogleSheets.ID, cfg.Run.GoogleSheets.GID)
 
-		keys, err := fetchGoogleSheetsKeys(cfg.Run.GoogleSheets.ID, cfg.Run.GoogleSheets.GID)
+		refs, err := fetchGoogleSheetsRefs(cfg.Run.GoogleSheets.ID, cfg.Run.GoogleSheets.GID)
 		if err != nil {
 			return fmt.Errorf("fetch google sheets: %w", err)
 		}
-		fmt.Printf("Discovered keys: %d\n", len(keys))
-		fmt.Printf("New keys: %d\n", countUnprocessedKeys(keys, st.ProcessedKeys))
+		fmt.Printf("Discovered shares: %d\n", len(refs))
+		fmt.Printf("New shares: %d\n", countUnprocessedShares(refs, st.ProcessedKeys))
 
-		for _, key := range keys {
+		for _, ref := range refs {
+			key := ref.StorageKey()
 			if _, ok := st.ProcessedKeys[key]; ok {
 				continue
 			}
-			fmt.Printf("Fetching share for key %s...\n", key)
-			share, err := wc.FetchShare(ctx, key)
+			fmt.Printf("Fetching %s share %s...\n", ref.Provider, ref.Key)
+			share, err := fetchShare(ref)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "wfpsim fetch failed key=%s err=%v\n", key, err)
+				fmt.Fprintf(os.Stderr, "%s fetch failed key=%s err=%v\n", ref.Provider, ref.Key, err)
 				continue
 			}
-			row, err := buildRowFromKey(key, share, aliasResolver)
+			row, err := buildRow("", nil, ref, share, aliasResolver)
 			if err != nil {
 				return err
 			}
@@ -234,14 +240,23 @@ func Run(ctx context.Context, cfg config.Config) error {
 				msgStopAfter = st.LastSearchIDs[guildID]
 			}
 
-			msgs, newestSeen, err := dc.SearchGuildMessages(ctx, guildID, "wfpsim.com/sh/", msgStopAfter, cutoff, cfg.Discord.ChannelIDs)
-			if err != nil {
-				return err
+			var allMessages []discord.Message
+			newestSeen := msgStopAfter
+			for _, query := range []string{"wfpsim.com/sh/", "sim.kqm.gg/sh/"} {
+				msgs, queryNewestSeen, err := dc.SearchGuildMessages(
+					ctx, guildID, query, msgStopAfter, cutoff, cfg.Discord.ChannelIDs,
+				)
+				if err != nil {
+					return err
+				}
+				allMessages = append(allMessages, msgs...)
+				newestSeen = laterMessageID(newestSeen, queryNewestSeen)
 			}
-			fmt.Printf("Fetched %d messages from guild search (guild=%s)\n", len(msgs), guildID)
-			keysFound := keysInMessages(msgs, cutoff)
-			fmt.Printf("Discovered keys: %d\n", len(keysFound))
-			fmt.Printf("New keys: %d\n", countUnprocessedKeys(keysFound, st.ProcessedKeys))
+			msgs := deduplicateMessages(allMessages)
+			fmt.Printf("Fetched %d messages from guild searches (guild=%s)\n", len(msgs), guildID)
+			sharesFound := keysInMessages(msgs, cutoff)
+			fmt.Printf("Discovered shares: %d\n", len(sharesFound))
+			fmt.Printf("New shares: %d\n", countUnprocessedShares(sharesFound, st.ProcessedKeys))
 
 			for _, m := range msgs {
 				// We still iterate over everything search returned, but only *process* messages
@@ -250,11 +265,12 @@ func Run(ctx context.Context, cfg config.Config) error {
 					continue
 				}
 
-				keys := extractKeys(m.Content)
-				if len(keys) == 0 {
+				refs := extractShares(m.Content)
+				if len(refs) == 0 {
 					continue
 				}
-				for _, key := range keys {
+				for _, ref := range refs {
+					key := ref.StorageKey()
 					if _, ok := seenKeys[key]; ok {
 						continue
 					}
@@ -263,14 +279,14 @@ func Run(ctx context.Context, cfg config.Config) error {
 						continue
 					}
 
-					fmt.Printf("Fetching share for key %s...\n", key)
-					share, err := wc.FetchShare(ctx, key)
+					fmt.Printf("Fetching %s share %s...\n", ref.Provider, ref.Key)
+					share, err := fetchShare(ref)
 					if err != nil {
-						fmt.Fprintf(os.Stderr, "wfpsim fetch failed key=%s msg=%s err=%v\n", key, m.ID, err)
+						fmt.Fprintf(os.Stderr, "%s fetch failed key=%s msg=%s err=%v\n", ref.Provider, ref.Key, m.ID, err)
 						continue
 					}
 
-					row, err := buildRow(guildID, m, key, share, aliasResolver)
+					row, err := buildRow(guildID, &m, ref, share, aliasResolver)
 					if err != nil {
 						return err
 					}
@@ -318,18 +334,19 @@ func Run(ctx context.Context, cfg config.Config) error {
 			return err
 		}
 		fmt.Printf("Fetched %d messages from channel %s\n", len(msgs), chID)
-		keysFound := keysInMessages(msgs, cutoff)
-		fmt.Printf("Discovered keys: %d\n", len(keysFound))
-		fmt.Printf("New keys: %d\n", countUnprocessedKeys(keysFound, st.ProcessedKeys))
+		sharesFound := keysInMessages(msgs, cutoff)
+		fmt.Printf("Discovered shares: %d\n", len(sharesFound))
+		fmt.Printf("New shares: %d\n", countUnprocessedShares(sharesFound, st.ProcessedKeys))
 
 		channelNewKeys := 0
 		for _, m := range msgs {
-			keys := extractKeys(m.Content)
-			if len(keys) == 0 {
+			refs := extractShares(m.Content)
+			if len(refs) == 0 {
 				continue
 			}
 
-			for _, key := range keys {
+			for _, ref := range refs {
+				key := ref.StorageKey()
 				if _, ok := seenKeys[key]; ok {
 					continue
 				}
@@ -338,15 +355,15 @@ func Run(ctx context.Context, cfg config.Config) error {
 					continue
 				}
 
-				fmt.Printf("Fetching share for key %s...\n", key)
-				share, err := wc.FetchShare(ctx, key)
+				fmt.Printf("Fetching %s share %s...\n", ref.Provider, ref.Key)
+				share, err := fetchShare(ref)
 				if err != nil {
-					// не прерываем весь прогон: ссылка могла умереть или API недоступно
-					fmt.Fprintf(os.Stderr, "wfpsim fetch failed key=%s msg=%s err=%v\n", key, m.ID, err)
+					// Continue the run: a share may have expired or its API may be unavailable.
+					fmt.Fprintf(os.Stderr, "%s fetch failed key=%s msg=%s err=%v\n", ref.Provider, ref.Key, m.ID, err)
 					continue
 				}
 
-				row, err := buildRow(guildID, m, key, share, aliasResolver)
+				row, err := buildRow(guildID, &m, ref, share, aliasResolver)
 				if err != nil {
 					return err
 				}
@@ -422,10 +439,11 @@ func saveRunState(cfg config.Config, st state.State) error {
 	return state.Save(cfg.Run.StateFile, st)
 }
 
-func countUnprocessedKeys(keys []string, processed map[string]time.Time) int {
+func countUnprocessedShares(refs []shareurl.ShareRef, processed map[string]time.Time) int {
 	count := 0
-	seen := make(map[string]struct{}, len(keys))
-	for _, key := range keys {
+	seen := make(map[string]struct{}, len(refs))
+	for _, ref := range refs {
+		key := ref.StorageKey()
 		if _, exists := seen[key]; exists {
 			continue
 		}
@@ -437,22 +455,23 @@ func countUnprocessedKeys(keys []string, processed map[string]time.Time) int {
 	return count
 }
 
-func keysInMessages(messages []discord.Message, cutoff time.Time) []string {
+func keysInMessages(messages []discord.Message, cutoff time.Time) []shareurl.ShareRef {
 	seen := make(map[string]struct{})
-	keys := make([]string, 0)
+	refs := make([]shareurl.ShareRef, 0)
 	for _, message := range messages {
 		if !cutoff.IsZero() && (message.CreatedAt.IsZero() || message.CreatedAt.Before(cutoff)) {
 			continue
 		}
-		for _, key := range extractKeys(message.Content) {
+		for _, ref := range extractShares(message.Content) {
+			key := ref.StorageKey()
 			if _, exists := seen[key]; exists {
 				continue
 			}
 			seen[key] = struct{}{}
-			keys = append(keys, key)
+			refs = append(refs, ref)
 		}
 	}
-	return keys
+	return refs
 }
 
 func pruneProcessedKeys(st *state.State, maxAge time.Duration) {
@@ -467,11 +486,142 @@ func pruneProcessedKeys(st *state.State, maxAge time.Duration) {
 	}
 }
 
-func extractKeys(content string) []string {
-	return shareurl.ExtractKeysFromText(content)
+func normalizeProcessedKeys(keys map[string]time.Time) {
+	normalized := make(map[string]time.Time, len(keys))
+	for key, processedAt := range keys {
+		canonical := shareurl.NormalizeStorageKey(key, "")
+		if previous, exists := normalized[canonical]; !exists || processedAt.After(previous) {
+			normalized[canonical] = processedAt
+		}
+	}
+	for key := range keys {
+		delete(keys, key)
+	}
+	for key, processedAt := range normalized {
+		keys[key] = processedAt
+	}
 }
 
-func buildRow(guildID string, m discord.Message, key string, share wfpsim.Share, aliasResolver *charalias.Resolver) ([]interface{}, error) {
+func extractShares(content string) []shareurl.ShareRef {
+	return shareurl.ExtractFromText(content)
+}
+
+func deduplicateMessages(messages []discord.Message) []discord.Message {
+	byID := make(map[string]discord.Message, len(messages))
+	for _, message := range messages {
+		byID[message.ID] = message
+	}
+	out := make([]discord.Message, 0, len(byID))
+	for _, message := range byID {
+		out = append(out, message)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
+	})
+	return out
+}
+
+func laterMessageID(a, b string) string {
+	if a == "" {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+	aNum, aErr := strconv.ParseUint(a, 10, 64)
+	bNum, bErr := strconv.ParseUint(b, 10, 64)
+	if aErr == nil && bErr == nil {
+		if bNum > aNum {
+			return b
+		}
+		return a
+	}
+	if b > a {
+		return b
+	}
+	return a
+}
+
+type archiveCharacter struct {
+	Name         string
+	WeaponName   string
+	WeaponRefine int
+}
+
+type archiveShare struct {
+	CharacterDetails []archiveCharacter
+	ConfigFile       string
+	DPSMean          float64
+	DPSQ2            float64
+	SimVersion       string
+	SchemaMajor      int
+	SchemaMinor      int
+}
+
+func fetchArchiveShare(
+	ctx context.Context,
+	ref shareurl.ShareRef,
+	wfClient *wfpsim.Client,
+	kqmClient *kqmsim.Client,
+) (archiveShare, error) {
+	switch ref.Provider {
+	case shareurl.ProviderWFPSim:
+		share, err := wfClient.FetchShare(ctx, ref.Key)
+		if err != nil {
+			return archiveShare{}, err
+		}
+		out := archiveShare{
+			ConfigFile:  share.ConfigFile,
+			DPSMean:     share.Statistics.DPS.Mean,
+			DPSQ2:       share.Statistics.DPS.Q2,
+			SimVersion:  share.SimVersion,
+			SchemaMajor: int(share.SchemaVersion.Major),
+			SchemaMinor: int(share.SchemaVersion.Minor),
+		}
+		for _, char := range share.CharacterDetails {
+			out.CharacterDetails = append(out.CharacterDetails, archiveCharacter{
+				Name:         char.Name,
+				WeaponName:   char.Weapon.Name,
+				WeaponRefine: char.Weapon.Refine,
+			})
+		}
+		return out, nil
+	case shareurl.ProviderKQMSim:
+		share, err := kqmClient.FetchShare(ctx, ref.Key)
+		if err != nil {
+			return archiveShare{}, err
+		}
+		out := archiveShare{
+			ConfigFile:  share.ConfigFile,
+			DPSMean:     share.Statistics.DPS.Mean,
+			DPSQ2:       share.Statistics.DPS.Q2,
+			SimVersion:  share.SimVersion,
+			SchemaMajor: int(share.SchemaVersion.Major),
+			SchemaMinor: int(share.SchemaVersion.Minor),
+		}
+		for _, char := range share.CharacterDetails {
+			out.CharacterDetails = append(out.CharacterDetails, archiveCharacter{
+				Name:         char.Name,
+				WeaponName:   char.Weapon.Name,
+				WeaponRefine: char.Weapon.Refine,
+			})
+		}
+		return out, nil
+	default:
+		return archiveShare{}, fmt.Errorf("unsupported share provider %q", ref.Provider)
+	}
+}
+
+func buildRow(
+	guildID string,
+	m *discord.Message,
+	ref shareurl.ShareRef,
+	share archiveShare,
+	aliasResolver *charalias.Resolver,
+) ([]interface{}, error) {
 	type pair struct {
 		char   string
 		weapon string
@@ -479,11 +629,11 @@ func buildRow(guildID string, m discord.Message, key string, share wfpsim.Share,
 	pairs := make([]pair, 0, len(share.CharacterDetails))
 	for _, c := range share.CharacterDetails {
 		w := ""
-		if c.Weapon.Name != "" {
-			if c.Weapon.Refine > 0 {
-				w = fmt.Sprintf("%s(r%d)", c.Weapon.Name, c.Weapon.Refine)
+		if c.WeaponName != "" {
+			if c.WeaponRefine > 0 {
+				w = fmt.Sprintf("%s(r%d)", c.WeaponName, c.WeaponRefine)
 			} else {
-				w = c.Weapon.Name
+				w = c.WeaponName
 			}
 		}
 		pairs = append(pairs, pair{char: c.Name, weapon: w})
@@ -518,105 +668,39 @@ func buildRow(guildID string, m discord.Message, key string, share wfpsim.Share,
 		}
 	}
 
-	shareURL := fmt.Sprintf("https://wfpsim.com/sh/%s", key)
+	channelID, messageID, messageURL, author, createdAt := "", "", "", "", ""
+	if m != nil {
+		channelID = m.ChannelID
+		messageID = m.ID
+		messageURL = discord.MessageURL(guildID, m.ChannelID, m.ID)
+		author = m.Author
+		createdAt = m.CreatedAt.Format(time.RFC3339)
+	}
 
 	return []interface{}{
 		time.Now().Format(time.RFC3339),
 		guildID,
-		m.ChannelID,
-		m.ID,
-		discord.MessageURL(guildID, m.ChannelID, m.ID),
-		m.Author,
-		m.CreatedAt.Format(time.RFC3339),
-		key,
-		shareURL,
+		channelID,
+		messageID,
+		messageURL,
+		author,
+		createdAt,
+		ref.StorageKey(),
+		ref.ShareURL(),
 		strings.Join(chars, ","),
 		strings.Join(weps, ","),
-		share.Statistics.DPS.Mean,
-		share.Statistics.DPS.Q2,
+		share.DPSMean,
+		share.DPSQ2,
 		share.ConfigFile,
 		share.SimVersion,
-		share.SchemaVersion.Major,
-		share.SchemaVersion.Minor,
+		share.SchemaMajor,
+		share.SchemaMinor,
 		strings.Join(cons, ","),
 	}, nil
 }
 
-// buildRowFromKey builds a row without Discord context (for googleSheets mode).
-// Discord-specific fields (guildID, channelID, messageID, messageURL, author, createdAt) are left empty.
-func buildRowFromKey(key string, share wfpsim.Share, aliasResolver *charalias.Resolver) ([]interface{}, error) {
-	type pair struct {
-		char   string
-		weapon string
-	}
-	pairs := make([]pair, 0, len(share.CharacterDetails))
-	for _, c := range share.CharacterDetails {
-		w := ""
-		if c.Weapon.Name != "" {
-			if c.Weapon.Refine > 0 {
-				w = fmt.Sprintf("%s(r%d)", c.Weapon.Name, c.Weapon.Refine)
-			} else {
-				w = c.Weapon.Name
-			}
-		}
-		pairs = append(pairs, pair{char: c.Name, weapon: w})
-	}
-	sort.Slice(pairs, func(i, j int) bool { return pairs[i].char < pairs[j].char })
-
-	chars := make([]string, 0, len(pairs))
-	weps := make([]string, 0, len(pairs))
-	consByChar, err := parseConsByChar(share.ConfigFile, aliasResolver)
-	if err != nil {
-		return nil, err
-	}
-	cons := make([]string, 0, len(pairs))
-	for _, p := range pairs {
-		chars = append(chars, p.char)
-		weps = append(weps, p.weapon)
-		lookup := strings.ToLower(p.char)
-		if aliasResolver != nil {
-			canon, ok := aliasResolver.Canonicalize(lookup)
-			if !ok {
-				return nil, fmt.Errorf("unknown character key %q (engine root=%s)", lookup, aliasResolver.EngineRoot())
-			}
-			lookup = canon
-		}
-		if v, ok := consByChar[lookup]; ok {
-			cons = append(cons, fmt.Sprintf("C%d", v))
-		} else {
-			if aliasResolver != nil {
-				return nil, fmt.Errorf("missing cons for character %q (engine root=%s)", lookup, aliasResolver.EngineRoot())
-			}
-			cons = append(cons, "")
-		}
-	}
-
-	shareURL := fmt.Sprintf("https://wfpsim.com/sh/%s", key)
-
-	return []interface{}{
-		time.Now().Format(time.RFC3339),
-		"", // guildID
-		"", // channelID
-		"", // messageID
-		"", // messageURL
-		"", // author
-		"", // createdAt
-		key,
-		shareURL,
-		strings.Join(chars, ","),
-		strings.Join(weps, ","),
-		share.Statistics.DPS.Mean,
-		share.Statistics.DPS.Q2,
-		share.ConfigFile,
-		share.SimVersion,
-		share.SchemaVersion.Major,
-		share.SchemaVersion.Minor,
-		strings.Join(cons, ","),
-	}, nil
-}
-
-// fetchGoogleSheetsKeys downloads the spreadsheet as XLSX and returns all wfpsim share keys found in it.
-func fetchGoogleSheetsKeys(sheetID, gid string) ([]string, error) {
+// fetchGoogleSheetsRefs downloads the spreadsheet as XLSX and returns all supported share URLs found in it.
+func fetchGoogleSheetsRefs(sheetID, gid string) ([]shareurl.ShareRef, error) {
 	exportURL := fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/export?format=xlsx", sheetID)
 	if strings.TrimSpace(gid) != "" {
 		exportURL += "&gid=" + gid
@@ -655,7 +739,7 @@ func fetchGoogleSheetsKeys(sheetID, gid string) ([]string, error) {
 	}
 	defer xl.Close()
 
-	return xlsxscan.FindWfpsimKeys(xl)
+	return xlsxscan.FindShareRefs(xl)
 }
 
 func parseConsByChar(configFile string, aliasResolver *charalias.Resolver) (map[string]int, error) {

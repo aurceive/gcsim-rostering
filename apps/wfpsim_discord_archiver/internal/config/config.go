@@ -49,7 +49,7 @@ type RunConfig struct {
 	IgnoreStateCheckpoint bool                     `yaml:"ignoreStateCheckpoint"`
 	DryRun                bool                     `yaml:"dryRun"`
 	GoogleSheets          GoogleSheetsSourceConfig `yaml:"googleSheets"`
-	URLs                  []string                 `yaml:"urls"` // urlList mode: wfpsim share URLs or keys
+	URLs                  []string                 `yaml:"urls"` // urlList mode: WFPSim/KQMsim URLs; bare keys default to WFPSim
 }
 
 type FileConfig struct {

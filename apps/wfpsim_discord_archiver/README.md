@@ -1,10 +1,10 @@
 # wfpsim_discord_archiver
 
-Архиватор ссылок вида `https://wfpsim.com/sh/<share-id>` из Discord-каналов.
+Архиватор ссылок WFPSim (`https://wfpsim.com/sh/<share-id>`) и KQMsim (`https://sim.kqm.gg/sh/<share-id>`) из Discord-каналов.
 
 - **Источник**: Discord сообщения (через обычного Discord Bot, не user token).
-- **Идентификатор**: весь сегмент `<share-id>` после `/sh/` является ключом. Это может быть UUID или slug с UUID в конце; разные slug считаются разными share.
-- **Данные**: дергает `https://wfpsim.com/api/share/<share-id>` и сохраняет нормализованные поля в Google Sheets.
+- **Идентификатор**: весь сегмент `<share-id>` после `/sh/` является ключом. Это может быть UUID или slug с UUID в конце; разные slug считаются разными share. Ключи в state и таблице имеют вид `wfpsim:<share-id>` или `kqmsim:<share-id>`, чтобы одинаковые ID у разных провайдеров не конфликтовали.
+- **Данные**: запрашивает API выбранного провайдера и сохраняет нормализованные поля в Google Sheets.
 - **Инкрементальность**: при первом запуске читает сообщения за последние `sinceDays` (по умолчанию 30), далее — с последнего обработанного messageId (state в `work/`).
 - **Пакетная запись**: отправляет в Apps Script до 10 строк за запрос; подтверждённые ключи сохраняются в state после каждого пакета.
 - **Сортировка**: записи упорядочиваются по `TeamCharacters` (asc), затем по `TeamDpsMean` (desc). В режиме Apps Script сортирует сам скрипт.
@@ -43,6 +43,7 @@
 - Опционально (алиасы персонажей для чтения конст): `engine` или `enginePath` (если задано — при ошибке резолва/парсинга алиасов или при невозможности определить консты приложение упадёт с ошибкой)
 - Apps Script: `appsScript.webAppUrl`, `appsScript.apiKey`
 - Google Sheet: `sheet.id`, `sheet.name`
+- `run.urls` в режиме `urlList` принимает полные ссылки WFPSim/KQMsim; голые ключи считаются WFPSim, для KQMsim можно использовать `kqmsim:<share-id>`.
 
 ### 3 Запуск
 

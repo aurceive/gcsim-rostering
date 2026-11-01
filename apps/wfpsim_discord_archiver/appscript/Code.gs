@@ -54,7 +54,9 @@ function doPost(e) {
       }
 
       var keyCol = colIndex["ShareKey"];
-      var shareKey = (keyCol == null) ? "" : safeStr_(mapped[keyCol]);
+      var urlCol = colIndex["ShareURL"];
+      var shareURL = (urlCol == null) ? "" : safeStr_(mapped[urlCol]);
+      var shareKey = (keyCol == null) ? "" : normalizeShareKey_(safeStr_(mapped[keyCol]), shareURL);
       if (!shareKey) {
         continue;
       }
@@ -89,18 +91,43 @@ function loadExistingShareKeys_(sh, colIndex) {
   if (!colIndex) return out;
   var keyCol = colIndex["ShareKey"]; // 0-based
   if (keyCol == null) return out;
+  var urlCol = colIndex["ShareURL"];
   var lastRow = sh.getLastRow();
   if (lastRow <= 1) return out;
   try {
     var values = sh.getRange(2, keyCol + 1, lastRow - 1, 1).getValues();
+    var urls = urlCol == null ? null : sh.getRange(2, urlCol + 1, lastRow - 1, 1).getValues();
     for (var i = 0; i < values.length; i++) {
       var k = safeStr_(values[i][0]);
+      var shareURL = urls ? safeStr_(urls[i][0]) : "";
+      k = normalizeShareKey_(k, shareURL);
       if (k) out[k] = true;
     }
   } catch (e) {
-    // ignore
+    throw new Error("failed to load existing ShareKey values: " + e);
   }
   return out;
+}
+
+function normalizeShareKey_(key, shareURL) {
+  key = safeStr_(key);
+  if (!key) return "";
+  var separator = key.indexOf(":");
+  if (separator >= 0) {
+    var provider = key.slice(0, separator).toLowerCase();
+    if (provider === "wfpsim" || provider === "kqmsim") {
+      return provider + ":" + key.slice(separator + 1);
+    }
+  }
+
+  shareURL = safeStr_(shareURL).toLowerCase();
+  if (shareURL.indexOf("https://wfpsim.com/sh/") === 0 || shareURL.indexOf("http://wfpsim.com/sh/") === 0) {
+    return "wfpsim:" + key;
+  }
+  if (shareURL.indexOf("https://sim.kqm.gg/sh/") === 0 || shareURL.indexOf("http://sim.kqm.gg/sh/") === 0) {
+    return "kqmsim:" + key;
+  }
+  return "wfpsim:" + key;
 }
 
 function ensureHeader_(sh) {

@@ -8,18 +8,18 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-// FindWfpsimKeys returns all distinct wfpsim share keys found in the given XLSX file.
+// FindShareRefs returns all distinct supported simulation shares found in the given XLSX file.
 // It scans both hyperlinks and plain cell text values in all sheets.
-// Share identifiers are lowercased, deduplicated, and returned in encounter order.
-func FindWfpsimKeys(f *excelize.File) ([]string, error) {
+// Shares are deduplicated by provider and identifier, in encounter order.
+func FindShareRefs(f *excelize.File) ([]shareurl.ShareRef, error) {
 	seen := map[string]struct{}{}
-	out := make([]string, 0)
+	out := make([]shareurl.ShareRef, 0)
 
-	addKey := func(key string) {
-		key = strings.ToLower(key)
+	addRef := func(ref shareurl.ShareRef) {
+		key := ref.StorageKey()
 		if _, ok := seen[key]; !ok {
 			seen[key] = struct{}{}
-			out = append(out, key)
+			out = append(out, ref)
 		}
 	}
 
@@ -38,15 +38,15 @@ func FindWfpsimKeys(f *excelize.File) ([]string, error) {
 				// 1. Check hyperlink target.
 				has, target, err := f.GetCellHyperLink(sh, axis)
 				if err == nil && has {
-					if k, ok := shareurl.ExtractKeyFromURL(target); ok {
-						addKey(k)
+					if ref, ok := shareurl.ParseURL(target); ok {
+						addRef(ref)
 					}
 				}
 
 				// 2. Check cell text value (covers plain URLs, not hyperlinks).
 				if cellText := strings.TrimSpace(row[c]); cellText != "" {
-					for _, k := range shareurl.ExtractKeysFromText(cellText) {
-						addKey(k)
+					for _, ref := range shareurl.ExtractFromText(cellText) {
+						addRef(ref)
 					}
 				}
 			}

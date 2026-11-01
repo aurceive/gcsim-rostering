@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/kqmsim"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/shareurl"
 	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/wfpsim"
 	"github.com/xuri/excelize/v2"
@@ -60,6 +61,7 @@ func main() {
 
 	ctx := context.Background()
 	wc := wfpsim.New()
+	kc := kqmsim.New()
 
 	f, err := excelize.OpenFile(inPath)
 	if err != nil {
@@ -73,7 +75,7 @@ func main() {
 
 	// 1) Insert columns where needed (to avoid overwriting existing data).
 	for _, sh := range sheets {
-		cols, firstLinkRowByCol, err := findWfpsimHyperlinkColumns(f, sh)
+		cols, firstLinkRowByCol, err := findShareHyperlinkColumns(f, sh)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warn: scan sheet %q: %v\n", sh, err)
 			continue
@@ -114,7 +116,7 @@ func main() {
 	failed := 0
 
 	for _, sh := range sheets {
-		cells, err := findWfpsimHyperlinkCells(f, sh)
+		cells, err := findShareHyperlinkCells(f, sh)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warn: scan hyperlinks in %q: %v\n", sh, err)
 			continue
@@ -125,21 +127,18 @@ func main() {
 
 		fmt.Printf("Sheet %q: hyperlinks=%d\n", sh, len(cells))
 		for _, cell := range cells {
-			key, ok := shareurl.ExtractKeyFromURL(cell.Target)
-			if !ok {
-				skipped++
-				continue
-			}
+			ref := cell.Ref
+			key := ref.StorageKey()
 
 			ent, ok := cf.Shares[key]
 			if !ok || (strings.TrimSpace(ent.Config) == "" && strings.TrimSpace(ent.Error) == "") {
-				share, err := wc.FetchShare(ctx, key)
+				config, err := fetchConfig(ctx, ref, wc, kc)
 				fetched++
 				if err != nil {
 					failed++
 					ent = cacheEntry{Error: err.Error(), FetchedAt: time.Now()}
 				} else {
-					ent = cacheEntry{Config: share.ConfigFile, FetchedAt: time.Now()}
+					ent = cacheEntry{Config: config, FetchedAt: time.Now()}
 				}
 				cf.Shares[key] = ent
 				// be nice to the API
@@ -207,13 +206,13 @@ func main() {
 }
 
 type hyperlinkCell struct {
-	Axis   string
-	Target string
-	Row    int
-	Col    int
+	Axis string
+	Ref  shareurl.ShareRef
+	Row  int
+	Col  int
 }
 
-func findWfpsimHyperlinkCells(f *excelize.File, sheet string) ([]hyperlinkCell, error) {
+func findShareHyperlinkCells(f *excelize.File, sheet string) ([]hyperlinkCell, error) {
 	rows, err := f.GetRows(sheet)
 	if err != nil {
 		return nil, err
@@ -230,20 +229,22 @@ func findWfpsimHyperlinkCells(f *excelize.File, sheet string) ([]hyperlinkCell, 
 			if err != nil || !has {
 				continue
 			}
-			if !strings.Contains(target, "wfpsim.com/sh/") {
+			ref, ok := shareurl.ParseURL(target)
+			if !ok {
 				continue
 			}
-			out = append(out, hyperlinkCell{Axis: axis, Target: target, Row: rowNum, Col: colNum})
+			out = append(out, hyperlinkCell{Axis: axis, Ref: ref, Row: rowNum, Col: colNum})
 		}
 	}
 	return out, nil
 }
 
-func findWfpsimHyperlinkColumns(f *excelize.File, sheet string) ([]int, map[int]int, error) {
-	cells, err := findWfpsimHyperlinkCells(f, sheet)
+func findShareHyperlinkColumns(f *excelize.File, sheet string) ([]int, map[int]int, error) {
+	cells, err := findShareHyperlinkCells(f, sheet)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	seen := map[int]struct{}{}
 	firstRowByCol := map[int]int{}
 	for _, c := range cells {
@@ -258,6 +259,25 @@ func findWfpsimHyperlinkColumns(f *excelize.File, sheet string) ([]int, map[int]
 	}
 	sort.Ints(cols)
 	return cols, firstRowByCol, nil
+}
+
+func fetchConfig(ctx context.Context, ref shareurl.ShareRef, wfClient *wfpsim.Client, kqmClient *kqmsim.Client) (string, error) {
+	switch ref.Provider {
+	case shareurl.ProviderWFPSim:
+		share, err := wfClient.FetchShare(ctx, ref.Key)
+		if err != nil {
+			return "", err
+		}
+		return share.ConfigFile, nil
+	case shareurl.ProviderKQMSim:
+		share, err := kqmClient.FetchShare(ctx, ref.Key)
+		if err != nil {
+			return "", err
+		}
+		return share.ConfigFile, nil
+	default:
+		return "", fmt.Errorf("unsupported share provider %q", ref.Provider)
+	}
 }
 
 func cellHasValueOrLink(f *excelize.File, sheet string, col int, row int) (bool, error) {
@@ -336,6 +356,14 @@ func loadCache(path string) (cacheFile, error) {
 	if out.Shares == nil {
 		out.Shares = map[string]cacheEntry{}
 	}
+	normalizedShares := make(map[string]cacheEntry, len(out.Shares))
+	for key, entry := range out.Shares {
+		canonical := shareurl.NormalizeStorageKey(key, "")
+		if current, exists := normalizedShares[canonical]; !exists || entry.FetchedAt.After(current.FetchedAt) {
+			normalizedShares[canonical] = entry
+		}
+	}
+	out.Shares = normalizedShares
 	return out, nil
 }
 

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/genshinsim/gcsim/apps/wfpsim_discord_archiver/internal/shareurl"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -376,7 +377,7 @@ func (w *Writer) writeSecondSheet(f *excelize.File, recs []record) error {
 }
 
 func recordFromRow(row []interface{}, key string) (record, error) {
-	key = strings.ToLower(strings.TrimSpace(key))
+	key = shareurl.NormalizeStorageKey(key, "")
 	if key == "" {
 		return record{}, fmt.Errorf("xlsx writer: empty key")
 	}
@@ -451,13 +452,14 @@ func recordFromStrings(r []string, colIndex map[string]int) (record, bool) {
 		return r[idx]
 	}
 
-	key := strings.ToLower(strings.TrimSpace(get("Key")))
+	key := strings.TrimSpace(get("Key"))
 	if key == "" {
 		// fallback for files without headers or older formats
 		if len(r) > 7 {
-			key = strings.ToLower(strings.TrimSpace(r[7]))
+			key = strings.TrimSpace(r[7])
 		}
 	}
+	key = shareurl.NormalizeStorageKey(key, get("ShareURL"))
 	if key == "" {
 		return record{}, false
 	}
