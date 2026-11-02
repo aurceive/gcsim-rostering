@@ -85,6 +85,24 @@ func TestAppendCompletedVariantResult_AppendsOnlyTargetVariant(t *testing.T) {
 	}
 }
 
+func TestSortMainStatVariants_UsesSelectedTarget(t *testing.T) {
+	variants := []domain.MainStatVariant{
+		{TeamDps: 100, CharDps: 300, MainStats: "atk"},
+		{TeamDps: 200, CharDps: 200, MainStats: "em"},
+		{TeamDps: 150, CharDps: 400, MainStats: "hp"},
+	}
+
+	sortMainStatVariants(variants, domain.TargetTeamDps)
+	if variants[0].MainStats != "em" || variants[1].MainStats != "hp" || variants[2].MainStats != "atk" {
+		t.Fatalf("unexpected team DPS order: %#v", variants)
+	}
+
+	sortMainStatVariants(variants, domain.TargetCharDps)
+	if variants[0].MainStats != "hp" || variants[1].MainStats != "atk" || variants[2].MainStats != "em" {
+		t.Fatalf("unexpected character DPS order: %#v", variants)
+	}
+}
+
 func TestFormatProgressLine_IncludesUnitFraction(t *testing.T) {
 	got := formatProgressLine(7, 42, 2, 6, "1m30s")
 	want := "Progress: 7/42 (16.7%), unit 2/6, ETA 1m30s"

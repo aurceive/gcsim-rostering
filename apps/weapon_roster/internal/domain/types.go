@@ -152,11 +152,21 @@ type CharacterData struct {
 }
 
 type Result struct {
-	Weapon    string
-	Refine    int
+	Weapon           string
+	Refine           int
+	TeamDps          int
+	CharDps          int
+	Er               float64
+	MainStats        string
+	MainStatVariants []MainStatVariant
+	Config           string
+}
+
+type MainStatVariant struct {
 	TeamDps   int
 	CharDps   int
 	Er        float64
 	MainStats string
 	Config    string
+	Display   string
 }

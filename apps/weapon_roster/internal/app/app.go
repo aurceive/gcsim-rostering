@@ -215,6 +215,18 @@ func appendCompletedVariantResult(resultsByVariant map[string][]domain.Result, v
 	resultsByVariant[variantName] = append(resultsByVariant[variantName], result)
 }
 
+func sortMainStatVariants(variants []domain.MainStatVariant, target domain.Target) {
+	sort.SliceStable(variants, func(i, j int) bool {
+		if target == domain.TargetTeamDps && variants[i].TeamDps != variants[j].TeamDps {
+			return variants[i].TeamDps > variants[j].TeamDps
+		}
+		if target != domain.TargetTeamDps && variants[i].CharDps != variants[j].CharDps {
+			return variants[i].CharDps > variants[j].CharDps
+		}
+		return variants[i].MainStats < variants[j].MainStats
+	})
+}
+
 func formatProgressLine(completed int, totalRuns int, unitCompleted int, unitTotal int, eta string) string {
 	percent := 0.0
 	if totalRuns > 0 {
@@ -729,11 +741,7 @@ func run(appRoot string, opts Options) error {
 				}
 				optStr := optionsByVariant[variantName]
 				talentLevel := talentLevelByVariant[variantName]
-				bestTeamDps := 0
-				bestCharDps := 0
-				bestEr := 0.0
-				bestMainStats := ""
-				bestConfig := ""
+				mainStatResults := make([]domain.MainStatVariant, 0, len(mainStatCombos))
 				for mainStatIdx, mainStats := range mainStatCombos {
 					if ctx.Err() != nil {
 						weaponCompleted = false
@@ -782,14 +790,13 @@ func run(appRoot string, opts Options) error {
 							return fmt.Errorf("engine result missing character_details[%d].snapshot[7]", charIndex)
 						}
 						er := res.CharacterDetails[charIndex].Snapshot[7] // ER index
-
-						if domain.IsBetterByTarget(target, teamDps, bestTeamDps, charDps, bestCharDps) {
-							bestTeamDps = teamDps
-							bestCharDps = charDps
-							bestEr = er
-							bestMainStats = mainStats
-							bestConfig = res.ConfigFile
-						}
+						mainStatResults = append(mainStatResults, domain.MainStatVariant{
+							TeamDps:   teamDps,
+							CharDps:   charDps,
+							MainStats: mainStats,
+							Er:        er,
+							Config:    res.ConfigFile,
+						})
 					}
 
 					// Progress: update after each simulation
@@ -809,8 +816,18 @@ func run(appRoot string, opts Options) error {
 				if !weaponCompleted {
 					break
 				}
-				// Save best result for this weapon+ref+variant.
-				appendCompletedVariantResult(resultsByVariant, variantName, domain.Result{Weapon: weapon, Refine: ref, TeamDps: bestTeamDps, CharDps: bestCharDps, Er: bestEr, MainStats: bestMainStats, Config: bestConfig})
+				sortMainStatVariants(mainStatResults, target)
+				result := domain.Result{Weapon: weapon, Refine: ref}
+				if len(mainStatResults) > 0 {
+					best := mainStatResults[0]
+					result.TeamDps = best.TeamDps
+					result.CharDps = best.CharDps
+					result.Er = best.Er
+					result.MainStats = best.MainStats
+					result.Config = best.Config
+					result.MainStatVariants = mainStatResults[1:]
+				}
+				appendCompletedVariantResult(resultsByVariant, variantName, result)
 			}
 			if !weaponCompleted {
 				break

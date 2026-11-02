@@ -258,22 +258,62 @@ func sortVariantResults(results []domain.Result, target domain.Target) []domain.
 	return out
 }
 
+func mainStatVariantDisplay(variant domain.MainStatVariant, best domain.Result, target domain.Target) string {
+	if variant.Display != "" {
+		return variant.Display
+	}
+
+	var bestDps, variantDps int
+	if target == domain.TargetTeamDps {
+		bestDps, variantDps = best.TeamDps, variant.TeamDps
+	} else {
+		bestDps, variantDps = best.CharDps, variant.CharDps
+	}
+	percent := 0.0
+	if bestDps > 0 {
+		percent = float64(variantDps) / float64(bestDps) * 100
+	}
+
+	stats := formatMainStatCodes(variant.MainStats)
+	if stats == "" {
+		return fmt.Sprintf("%.1f%%", percent)
+	}
+	return fmt.Sprintf("%.1f%% %s", percent, stats)
+}
+
+func formatMainStatCodes(mainStats string) string {
+	stats := make([]string, 0, len(strings.Fields(mainStats)))
+	for _, stat := range strings.Fields(mainStats) {
+		code, _, _ := strings.Cut(stat, "=")
+		if code != "" {
+			stats = append(stats, strings.ToUpper(code))
+		}
+	}
+	return strings.Join(stats, " ")
+}
+
 func ExportResultsXLSX(appRoot string, char string, partyMembers []string, rosterName string, target domain.Target, variantOrder []string, resultsByVariant map[string][]domain.Result, weaponData domain.WeaponData, weaponNames map[string]string, weaponSources map[string][]string, outputPath string, runConfigFiles []RunConfigFile, referenceWeapon string, referenceRefine int) (string, error) {
 	if len(variantOrder) == 0 {
 		variantOrder = []string{"default"}
 	}
-	const resultsBlockSize = 8
 	const configOnlyBlockSize = 1
 	formattedPartyMembers := formatPartyMembers(partyMembers, char)
 	sortedByVariant := make(map[string][]domain.Result, len(variantOrder))
 	maxRows := 0
+	maxMainStatVariants := 0
 	for _, v := range variantOrder {
 		sorted := sortVariantResults(resultsByVariant[v], target)
 		sortedByVariant[v] = sorted
 		if len(sorted) > maxRows {
 			maxRows = len(sorted)
 		}
+		for _, result := range sorted {
+			if len(result.MainStatVariants) > maxMainStatVariants {
+				maxMainStatVariants = len(result.MainStatVariants)
+			}
+		}
 	}
+	resultsBlockSize := 8 + maxMainStatVariants
 
 	// Export to xlsx
 	f := excelize.NewFile()
@@ -311,7 +351,7 @@ func ExportResultsXLSX(appRoot string, char string, partyMembers []string, roste
 	}
 
 	for i, v := range variantOrder {
-		// Results sheet (8 columns per variant)
+		// Results sheet (8 fixed columns plus one column per additional main-stat variant)
 		{
 			start := 1 + i*resultsBlockSize
 			startCol := colName(start)
@@ -327,6 +367,9 @@ func ExportResultsXLSX(appRoot string, char string, partyMembers []string, roste
 			f.SetCellValue(sheet, fmt.Sprintf("%s3", colName(start+5)), "Char %")
 			f.SetCellValue(sheet, fmt.Sprintf("%s3", colName(start+6)), "ER%")
 			f.SetCellValue(sheet, fmt.Sprintf("%s3", colName(start+7)), "Main Stats")
+			for j := 0; j < maxMainStatVariants; j++ {
+				f.SetCellValue(sheet, fmt.Sprintf("%s3", colName(start+8+j)), fmt.Sprintf("MS %d", j+2))
+			}
 		}
 
 		// Results+Config sheet: first metric blocks, then config-only columns.
@@ -345,6 +388,9 @@ func ExportResultsXLSX(appRoot string, char string, partyMembers []string, roste
 			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s3", colName(start+5)), "Char %")
 			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s3", colName(start+6)), "ER%")
 			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s3", colName(start+7)), "Main Stats")
+			for j := 0; j < maxMainStatVariants; j++ {
+				f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s3", colName(start+8+j)), fmt.Sprintf("MS %d", j+2))
+			}
 
 			cfgCol := len(variantOrder)*resultsBlockSize + 1 + i
 			cfgColName := colName(cfgCol)
@@ -399,7 +445,7 @@ func ExportResultsXLSX(appRoot string, char string, partyMembers []string, roste
 				f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+5), row), float64(r.CharDps)/float64(bestAvailChar[v]))
 			}
 			f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+6), row), r.Er)
-			f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+7), row), r.MainStats)
+			f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+7), row), formatMainStatCodes(r.MainStats))
 
 			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(start+0), row), name)
 			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(start+1), row), r.Refine)
@@ -412,7 +458,12 @@ func ExportResultsXLSX(appRoot string, char string, partyMembers []string, roste
 				f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(start+5), row), float64(r.CharDps)/float64(bestAvailChar[v]))
 			}
 			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(start+6), row), r.Er)
-			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(start+7), row), r.MainStats)
+			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(start+7), row), formatMainStatCodes(r.MainStats))
+			for j, variant := range r.MainStatVariants {
+				value := mainStatVariantDisplay(variant, r, target)
+				f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+8+j), row), value)
+				f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(start+8+j), row), value)
+			}
 			f.SetCellValue(sheetWithConfig, fmt.Sprintf("%s%d", colName(cfgCol), row), r.Config)
 		}
 	}

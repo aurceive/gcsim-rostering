@@ -18,7 +18,7 @@ func TestExportResultsXLSX_NewLayoutUsesIndependentVariantBlocks(t *testing.T) {
 	weaponSources := map[string][]string{"w1": {"Ковка"}, "w2": {"Ковка"}}
 	resultsByVariant := map[string][]domain.Result{
 		"a": {
-			{Weapon: "w2", Refine: 1, TeamDps: 1200, CharDps: 800, Er: 1.2, MainStats: "atk", Config: "cfg-a-w2"},
+			{Weapon: "w2", Refine: 1, TeamDps: 1200, CharDps: 800, Er: 1.2, MainStats: "atk%=0.466 pyro%=0.466 cr=0.311", MainStatVariants: []domain.MainStatVariant{{TeamDps: 1100, CharDps: 750, MainStats: "atk%=0.466 pyro%=0.466 cd=0.622"}}, Config: "cfg-a-w2"},
 			{Weapon: "w1", Refine: 1, TeamDps: 1000, CharDps: 700, Er: 1.1, MainStats: "atk", Config: "cfg-a-w1"},
 		},
 		"b": {
@@ -68,26 +68,41 @@ func TestExportResultsXLSX_NewLayoutUsesIndependentVariantBlocks(t *testing.T) {
 		t.Fatalf("expected H1 to contain date, got empty string")
 	}
 	variantA, _ := f.GetCellValue("Results", "A2")
-	variantB, _ := f.GetCellValue("Results", "I2")
+	variantB, _ := f.GetCellValue("Results", "J2")
 	if variantA != "a" || variantB != "b" {
 		t.Fatalf("unexpected variant headers: A2=%q I2=%q", variantA, variantB)
+	}
+	if got, _ := f.GetCellValue("Results", "I3"); got != "MS 2" {
+		t.Fatalf("unexpected alternative main-stat header: %q", got)
+	}
+	if got, _ := f.GetCellValue("Results", "I4"); got != "91.7% ATK% PYRO% CD" {
+		t.Fatalf("unexpected alternative main-stat value: %q", got)
+	}
+	if got, _ := f.GetCellValue("Results", "H4"); got != "ATK% PYRO% CR" {
+		t.Fatalf("unexpected main-stat value: %q", got)
+	}
+	if got, _ := f.GetCellValue("Config", "H4"); got != "ATK% PYRO% CR" {
+		t.Fatalf("unexpected Config-sheet main-stat value: %q", got)
+	}
+	if got, _ := f.GetCellValue("Config", "I4"); got != "91.7% ATK% PYRO% CD" {
+		t.Fatalf("unexpected Config-sheet alternative main-stat value: %q", got)
 	}
 	if got, _ := f.GetCellValue("Results", "A4"); got != "Weapon Two" {
 		t.Fatalf("variant a should be sorted independently, got A4=%q", got)
 	}
-	if got, _ := f.GetCellValue("Results", "I4"); got != "Weapon One" {
-		t.Fatalf("variant b should be sorted independently, got I4=%q", got)
+	if got, _ := f.GetCellValue("Results", "J4"); got != "Weapon One" {
+		t.Fatalf("variant b should be sorted independently, got J4=%q", got)
 	}
-	if got, _ := f.GetCellValue("Config", "Q2"); got != "a" {
+	if got, _ := f.GetCellValue("Config", "S2"); got != "a" {
 		t.Fatalf("expected config section header for variant a, got %q", got)
 	}
-	if got, _ := f.GetCellValue("Config", "R2"); got != "b" {
+	if got, _ := f.GetCellValue("Config", "T2"); got != "b" {
 		t.Fatalf("expected config section header for variant b, got %q", got)
 	}
-	if got, _ := f.GetCellValue("Config", "Q4"); got != "cfg-a-w2" {
+	if got, _ := f.GetCellValue("Config", "S4"); got != "cfg-a-w2" {
 		t.Fatalf("unexpected config value for variant a: %q", got)
 	}
-	if got, _ := f.GetCellValue("Config", "R4"); got != "cfg-b-w1" {
+	if got, _ := f.GetCellValue("Config", "T4"); got != "cfg-b-w1" {
 		t.Fatalf("unexpected config value for variant b: %q", got)
 	}
 	if got, _ := f.GetCellValue("Run Config", "A1"); got != "Config file" {
@@ -130,6 +145,16 @@ func TestExportResultsXLSX_NewLayoutUsesIndependentVariantBlocks(t *testing.T) {
 	}
 	if len(imported["a"]) != 2 || len(imported["b"]) != 2 {
 		t.Fatalf("unexpected imported sizes: a=%d b=%d", len(imported["a"]), len(imported["b"]))
+	}
+	var importedAlternatives []domain.MainStatVariant
+	for _, result := range imported["a"] {
+		if result.Weapon == "w2" {
+			importedAlternatives = result.MainStatVariants
+			break
+		}
+	}
+	if len(importedAlternatives) != 1 || importedAlternatives[0].Display != "91.7% ATK% PYRO% CD" {
+		t.Fatalf("variant a alternative main stats were not imported: %#v", imported["a"])
 	}
 	if !hasImportedConfig(imported["a"], "w2", "cfg-a-w2") {
 		t.Fatalf("variant a config was not imported correctly: %#v", imported["a"])

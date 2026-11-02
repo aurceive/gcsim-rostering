@@ -71,10 +71,13 @@ func finalizeImportedResults(variantOrder []string, byVariant map[string]map[res
 }
 
 func importResultsXLSXNewLayout(f *excelize.File, sheet string, isWithConfig bool, weaponData domain.WeaponData, reverseNameToKey map[string]string) ([]string, map[string][]domain.Result, error) {
-	const resultsBlockSize = 8
+	const fixedResultsBlockSize = 8
 
 	variantOrder := make([]string, 0, 4)
-	for startCol := 1; ; startCol += resultsBlockSize {
+	variantStarts := make([]int, 0, 4)
+	nextStartCol := 1
+	for {
+		startCol := nextStartCol
 		vName, err := f.GetCellValue(sheet, fmt.Sprintf("%s2", colName(startCol)))
 		if err != nil {
 			return nil, nil, fmt.Errorf("read %s!%s2: %w", sheet, colName(startCol), err)
@@ -91,6 +94,21 @@ func importResultsXLSXNewLayout(f *excelize.File, sheet string, isWithConfig boo
 			break
 		}
 		variantOrder = append(variantOrder, vName)
+		variantStarts = append(variantStarts, startCol)
+
+		additionalVariants := 0
+		for {
+			msHeader, err := f.GetCellValue(sheet, fmt.Sprintf("%s3", colName(startCol+fixedResultsBlockSize+additionalVariants)))
+			if err != nil {
+				return nil, nil, fmt.Errorf("read %s!%s3: %w", sheet, colName(startCol+fixedResultsBlockSize+additionalVariants), err)
+			}
+			expectedHeader := fmt.Sprintf("MS %d", additionalVariants+2)
+			if !strings.EqualFold(strings.TrimSpace(msHeader), expectedHeader) {
+				break
+			}
+			additionalVariants++
+		}
+		nextStartCol = startCol + fixedResultsBlockSize + additionalVariants
 	}
 	if len(variantOrder) == 0 {
 		return nil, nil, fmt.Errorf("xlsx %q: no variant blocks found in %s", filepath.Base(f.Path), sheet)
@@ -98,8 +116,9 @@ func importResultsXLSXNewLayout(f *excelize.File, sheet string, isWithConfig boo
 
 	configCols := make(map[string]int, len(variantOrder))
 	if isWithConfig {
+		firstConfigCol := nextStartCol
 		for i, v := range variantOrder {
-			col := len(variantOrder)*resultsBlockSize + 1 + i
+			col := firstConfigCol + i
 			name, err := f.GetCellValue(sheet, fmt.Sprintf("%s2", colName(col)))
 			if err != nil {
 				return nil, nil, fmt.Errorf("read %s!%s2: %w", sheet, colName(col), err)
@@ -122,7 +141,8 @@ func importResultsXLSXNewLayout(f *excelize.File, sheet string, isWithConfig boo
 	}
 
 	for i, v := range variantOrder {
-		start := 1 + i*resultsBlockSize
+		start := variantStarts[i]
+		additionalVariants := nextVariantStart(variantStarts, i, nextStartCol) - start - fixedResultsBlockSize
 		for row := 4; row <= maxRow; row++ {
 			weaponCell, _ := f.GetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+0), row))
 			refCell, _ := f.GetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+1), row))
@@ -150,6 +170,17 @@ func importResultsXLSXNewLayout(f *excelize.File, sheet string, isWithConfig boo
 			erStr, _ := f.GetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+6), row))
 			er, _ := parseFloatCell(erStr)
 			ms, _ := f.GetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+7), row))
+			mainStatVariants := make([]domain.MainStatVariant, 0, additionalVariants)
+			for j := 0; j < additionalVariants; j++ {
+				value, err := f.GetCellValue(sheet, fmt.Sprintf("%s%d", colName(start+fixedResultsBlockSize+j), row))
+				if err != nil {
+					return nil, nil, fmt.Errorf("read %s!%s%d: %w", sheet, colName(start+fixedResultsBlockSize+j), row, err)
+				}
+				value = strings.TrimSpace(value)
+				if value != "" {
+					mainStatVariants = append(mainStatVariants, domain.MainStatVariant{Display: value})
+				}
+			}
 
 			cfg := ""
 			if cfgCol, ok := configCols[v]; ok {
@@ -159,18 +190,26 @@ func importResultsXLSXNewLayout(f *excelize.File, sheet string, isWithConfig boo
 
 			weaponKey := resolveWeaponKey(weaponCell, weaponData, reverseNameToKey)
 			byVariant[v][resultKey{Weapon: weaponKey, Refine: ref}] = domain.Result{
-				Weapon:    weaponKey,
-				Refine:    ref,
-				TeamDps:   team,
-				CharDps:   char,
-				Er:        er,
-				MainStats: strings.TrimSpace(ms),
-				Config:    cfg,
+				Weapon:           weaponKey,
+				Refine:           ref,
+				TeamDps:          team,
+				CharDps:          char,
+				Er:               er,
+				MainStats:        strings.TrimSpace(ms),
+				MainStatVariants: mainStatVariants,
+				Config:           cfg,
 			}
 		}
 	}
 
 	return variantOrder, finalizeImportedResults(variantOrder, byVariant), nil
+}
+
+func nextVariantStart(starts []int, index int, fallback int) int {
+	if index+1 < len(starts) {
+		return starts[index+1]
+	}
+	return fallback
 }
 
 func importResultsXLSXLegacyLayout(f *excelize.File, sheet string, isWithConfig bool, weaponData domain.WeaponData, reverseNameToKey map[string]string) ([]string, map[string][]domain.Result, error) {
