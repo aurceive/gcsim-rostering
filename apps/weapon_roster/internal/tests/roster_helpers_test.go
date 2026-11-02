@@ -1,6 +1,7 @@
 package weaponroster_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/genshinsim/gcsim/apps/weapon_roster/internal/config"
@@ -63,8 +64,32 @@ func TestBuildMainStatCombos(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("expected 2 combos, got %d: %#v", len(got), got)
 	}
-	if got[0] != "atk%=0.466 pyro%=0.466 cr=0.311" {
-		t.Fatalf("unexpected combo[0]=%q", got[0])
+	if got[0].Stats != "atk%=0.466 pyro%=0.466 cr=0.311" {
+		t.Fatalf("unexpected combo[0] stats=%q", got[0].Stats)
+	}
+	if got[0].Canonical != got[0].Stats {
+		t.Fatalf("expected unchanged canonical order, got %q", got[0].Canonical)
+	}
+}
+
+func TestBuildMainStatCombos_DeduplicatesValidPermutations(t *testing.T) {
+	var cfg domain.Config
+	cfg.MainStats.Sands = []string{"em=187", "atk%=0.466"}
+	cfg.MainStats.Goblet = []string{"em=187", "atk%=0.466"}
+	cfg.MainStats.Circlet = []string{"cd=0.622"}
+
+	got := config.BuildMainStatCombos(cfg)
+	if len(got) != 3 {
+		t.Fatalf("expected 3 unique combos, got %d: %#v", len(got), got)
+	}
+	if got[1].Stats != "em=187 atk%=0.466 cd=0.622" {
+		t.Fatalf("expected first mixed slot arrangement to be retained, got %q", got[1].Stats)
+	}
+	if got[1].Canonical != "atk%=0.466 em=187 cd=0.622" {
+		t.Fatalf("unexpected canonical combo: %q", got[1].Canonical)
+	}
+	if strings.Fields(got[1].Canonical)[2] != "cd=0.622" {
+		t.Fatalf("circlet-only stat moved out of circlet: %q", got[1].Canonical)
 	}
 }
 

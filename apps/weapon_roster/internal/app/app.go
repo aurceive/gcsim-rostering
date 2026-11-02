@@ -747,7 +747,7 @@ func run(appRoot string, opts Options) error {
 						weaponCompleted = false
 						break
 					}
-					newConfig, err := config.EditConfig(configStr, char, weapon, ref, mainStats)
+					newConfig, err := config.EditConfig(configStr, char, weapon, ref, mainStats.Stats)
 					if err != nil {
 						return err
 					}
@@ -775,8 +775,8 @@ func run(appRoot string, opts Options) error {
 						// Non-fatal engine error: treat this combo as 0 DPS, continue with remaining combos.
 						errSummary := lastNonEmptyLine(err.Error())
 						fmt.Fprintf(os.Stderr, "WARN: engine error for %s R%d [%s] (%s), skipping combo: %s\n",
-							weapon, ref, variantName, mainStats, errSummary)
-						engineFailures = append(engineFailures, fmt.Sprintf("%s R%d [%s] (%s): %s", weapon, ref, variantName, mainStats, errSummary))
+							weapon, ref, variantName, mainStats.Stats, errSummary)
+						engineFailures = append(engineFailures, fmt.Sprintf("%s R%d [%s] (%s): %s", weapon, ref, variantName, mainStats.Stats, errSummary))
 					} else {
 						teamDps := int(*res.Statistics.DPS.Mean)
 						if len(res.Statistics.CharacterDps) <= charIndex {
@@ -793,7 +793,7 @@ func run(appRoot string, opts Options) error {
 						mainStatResults = append(mainStatResults, domain.MainStatVariant{
 							TeamDps:   teamDps,
 							CharDps:   charDps,
-							MainStats: mainStats,
+							MainStats: mainStats.Canonical,
 							Er:        er,
 							Config:    res.ConfigFile,
 						})
