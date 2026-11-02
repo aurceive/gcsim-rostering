@@ -11,8 +11,15 @@
 ## Запуск
 
 - `apps/weapon_roster/roster.exe`
+- `apps/weapon_roster/roster.exe -configTable output\weapon_roster\<table>.xlsx` — загрузить `config.txt` и `roster_config.yaml` непосредственно из листа `Run Config` таблицы. Относительный путь отсчитывается от текущего рабочего каталога при запуске. Этот флаг нельзя использовать вместе с `-useExamples`.
 
 Если `input/weapon_roster/config.txt` или `input/weapon_roster/roster_config.yaml` отсутствуют, запустите `scripts/weapon_roster/bootstrap.ps1` — он создаст их из `input/weapon_roster/examples/`.
+
+Чтобы скопировать конфиги из таблицы в `input/weapon_roster`, запустите из корня репозитория:
+
+- `scripts/weapon_roster/copy-configs-from-table.ps1 -TablePath output\weapon_roster\<table>.xlsx`
+
+Относительный путь к таблице отсчитывается от текущего рабочего каталога PowerShell при запуске скрипта. Скрипт перезапишет `config.txt` и `roster_config.yaml` найденными в таблице версиями. Поддерживаются файлы с именами `config.txt` / `roster_config.yaml` и конфиги из примеров (`config.example.txt` / `roster_config.example.yaml`).
 
 ## Выбор активного движка
 

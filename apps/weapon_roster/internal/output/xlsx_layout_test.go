@@ -36,6 +36,13 @@ func TestExportResultsXLSX_NewLayoutUsesIndependentVariantBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("export failed: %v", err)
 	}
+	runConfigs, err := ReadRunConfigFilesXLSX(filename)
+	if err != nil {
+		t.Fatalf("read exported run configs: %v", err)
+	}
+	if runConfigs["config.txt"] != runConfigFiles[0].Content || runConfigs["roster_config.yaml"] != runConfigFiles[1].Content {
+		t.Fatalf("unexpected run configs from workbook: %#v", runConfigs)
+	}
 
 	f, err := excelize.OpenFile(filename)
 	if err != nil {

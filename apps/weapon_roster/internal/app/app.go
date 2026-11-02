@@ -252,7 +252,8 @@ func Run() int {
 }
 
 type Options struct {
-	UseExamples bool
+	UseExamples     bool
+	ConfigTablePath string
 }
 
 // RunWithOptions executes the roster optimization flow and returns the desired process exit code.
@@ -282,27 +283,47 @@ func run(appRoot string, opts Options) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	// Read config.txt
-	configPath := filepath.Join(appRoot, "input", "weapon_roster", "config.txt")
-	if opts.UseExamples {
-		configPath = filepath.Join(appRoot, "input", "weapon_roster", "examples", "config.example.txt")
+	if opts.UseExamples && strings.TrimSpace(opts.ConfigTablePath) != "" {
+		return fmt.Errorf("-useExamples and -configTable cannot be used together")
 	}
-	configBytes, err := os.ReadFile(configPath)
-	if err != nil {
-		return fmt.Errorf("read config.txt (%s): %w", configPath, err)
+
+	configName := "config.txt"
+	rosterConfigName := "roster_config.yaml"
+	var configBytes, yamlBytes []byte
+	var err error
+	if tablePath := strings.TrimSpace(opts.ConfigTablePath); tablePath != "" {
+		tablePath = filepath.FromSlash(tablePath)
+		tablePath, err = filepath.Abs(tablePath)
+		if err != nil {
+			return fmt.Errorf("resolve config table path: %w", err)
+		}
+		configs, err := output.ReadRunConfigFilesXLSX(tablePath)
+		if err != nil {
+			return fmt.Errorf("read configs from table (%s): %w", tablePath, err)
+		}
+		configBytes = []byte(configs[configName])
+		yamlBytes = []byte(configs[rosterConfigName])
+	} else {
+		configPath := filepath.Join(appRoot, "input", "weapon_roster", configName)
+		rosterConfigPath := filepath.Join(appRoot, "input", "weapon_roster", rosterConfigName)
+		if opts.UseExamples {
+			configPath = filepath.Join(appRoot, "input", "weapon_roster", "examples", "config.example.txt")
+			rosterConfigPath = filepath.Join(appRoot, "input", "weapon_roster", "examples", "roster_config.example.yaml")
+			configName = filepath.Base(configPath)
+			rosterConfigName = filepath.Base(rosterConfigPath)
+		}
+		configBytes, err = os.ReadFile(configPath)
+		if err != nil {
+			return fmt.Errorf("read config.txt (%s): %w", configPath, err)
+		}
+		yamlBytes, err = os.ReadFile(rosterConfigPath)
+		if err != nil {
+			return fmt.Errorf("read roster_config.yaml (%s): %w", rosterConfigPath, err)
+		}
 	}
 	configStr := string(configBytes)
 
-	// Read roster_config.yaml
 	var cfg domain.Config
-	rosterConfigPath := filepath.Join(appRoot, "input", "weapon_roster", "roster_config.yaml")
-	if opts.UseExamples {
-		rosterConfigPath = filepath.Join(appRoot, "input", "weapon_roster", "examples", "roster_config.example.yaml")
-	}
-	yamlBytes, err := os.ReadFile(rosterConfigPath)
-	if err != nil {
-		return fmt.Errorf("read roster_config.yaml (%s): %w", rosterConfigPath, err)
-	}
 	err = yaml.Unmarshal(yamlBytes, &cfg)
 	if err != nil {
 		return fmt.Errorf("parse roster_config.yaml: %w", err)
@@ -858,8 +879,8 @@ func run(appRoot string, opts Options) error {
 
 	// Export to xlsx (no console result output)
 	runConfigFiles := []output.RunConfigFile{
-		{Name: filepath.Base(configPath), Content: configStr},
-		{Name: filepath.Base(rosterConfigPath), Content: string(yamlBytes)},
+		{Name: configName, Content: configStr},
+		{Name: rosterConfigName, Content: string(yamlBytes)},
 	}
 	xlsxPath, err := output.ExportResultsXLSX(appRoot, char, charOrder, cfg.RosterName, target, finalVariantOrder, finalResultsByVariant, weaponData, weaponNames, weaponSources, outputPath, runConfigFiles, manualWeaponKey, manualWeaponRefine)
 	if err != nil {

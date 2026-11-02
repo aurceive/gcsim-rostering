@@ -291,6 +291,64 @@ func importResultsXLSXLegacyLayout(f *excelize.File, sheet string, isWithConfig 
 	return variantOrder, finalizeImportedResults(variantOrder, byVariant), nil
 }
 
+// ReadRunConfigFilesXLSX reads the full config.txt and roster_config.yaml contents saved in a roster workbook.
+func ReadRunConfigFilesXLSX(path string) (map[string]string, error) {
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("open xlsx %q: %w", path, err)
+	}
+	defer func() { _ = f.Close() }()
+
+	const sheet = "Run Config"
+	if idx, _ := f.GetSheetIndex(sheet); idx < 0 {
+		return nil, fmt.Errorf("xlsx %q: missing sheet %q", filepath.Base(path), sheet)
+	}
+	rows, err := f.GetRows(sheet)
+	if err != nil {
+		return nil, fmt.Errorf("read rows %s: %w", sheet, err)
+	}
+	if len(rows) == 0 || len(rows[0]) < 3 ||
+		!strings.EqualFold(strings.TrimSpace(rows[0][0]), "Config file") ||
+		!strings.EqualFold(strings.TrimSpace(rows[0][1]), "Setting") ||
+		!strings.EqualFold(strings.TrimSpace(rows[0][2]), "Content") {
+		return nil, fmt.Errorf("xlsx %q: invalid %q header", filepath.Base(path), sheet)
+	}
+
+	configs := make(map[string]string, 2)
+	for _, row := range rows[1:] {
+		if len(row) < 1 || strings.TrimSpace(row[0]) == "" {
+			continue
+		}
+		if len(row) > 1 && strings.TrimSpace(row[1]) != "" {
+			continue
+		}
+		name := strings.ToLower(filepath.Base(strings.TrimSpace(row[0])))
+		switch name {
+		case "config.example.txt":
+			name = "config.txt"
+		case "roster_config.example.yaml":
+			name = "roster_config.yaml"
+		}
+		if name != "config.txt" && name != "roster_config.yaml" {
+			continue
+		}
+		if _, exists := configs[name]; exists {
+			return nil, fmt.Errorf("xlsx %q: duplicate full contents for %s in %q", filepath.Base(path), name, sheet)
+		}
+		content := ""
+		if len(row) > 2 {
+			content = row[2]
+		}
+		configs[name] = content
+	}
+	for _, name := range []string{"config.txt", "roster_config.yaml"} {
+		if _, ok := configs[name]; !ok {
+			return nil, fmt.Errorf("xlsx %q: %q does not contain full %s contents in %q", filepath.Base(path), sheet, name, sheet)
+		}
+	}
+	return configs, nil
+}
+
 // ImportResultsXLSX reads a weapon_roster XLSX (either the "Config" sheet, the legacy "Results+Config" sheet, or the "Results" sheet)
 // and returns the variant column order and per-variant results.
 func ImportResultsXLSX(path string, weaponData domain.WeaponData, weaponNames map[string]string) ([]string, map[string][]domain.Result, error) {
