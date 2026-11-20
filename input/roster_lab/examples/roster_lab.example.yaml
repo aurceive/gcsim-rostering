@@ -1,0 +1,58 @@
+version: 1
+
+project:
+  name: roster_lab_demo
+  target_character: arlecchino
+
+engine:
+  name: gcsim
+
+target: team_dps
+optimize_substats: true
+
+output:
+  directory: output/roster_lab
+
+resume:
+  mode: auto
+  max_age_hours: 24
+
+scenarios:
+  weapons:
+    enabled: true
+    available_weapon: deathmatch 1
+    minimum_rarity: 5
+    items:
+      - deathmatch 1
+    optimizer_variants:
+      - name: demo
+        options:
+          talent_level: 9
+          total_liquid_substats: 20
+          indiv_liquid_cap: 10
+          fixed_substats_count: 2
+    main_stats:
+      sands: [atk%=0.466]
+      goblet: [pyro%=0.466]
+      circlet: [cd=0.622]
+
+  growth:
+    enabled: false
+    investment_levels:
+      - name: demo
+        options:
+          talent_level: 9
+          total_liquid_substats: 20
+          indiv_liquid_cap: 10
+          fixed_substats_count: 2
+
+  constellations:
+    enabled: false
+    scope: character
+    characters: [arlecchino 0 1]
+    max_additional: 1
+
+  talents:
+    enabled: false
+    scope: character
+    matrix: default

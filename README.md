@@ -22,6 +22,7 @@
 - wfpsim_discord_archiver: `scripts/wfpsim_discord_archiver/bootstrap.ps1`
 - constellation_comparator: `scripts/constellation_comparator/bootstrap.ps1`
 - talent_comparator: `scripts/talent_comparator/bootstrap.ps1`
+- roster_lab: `scripts/roster_lab/bootstrap.ps1`
 - ui_server: `scripts/ui_server/bootstrap.ps1`
 
 Скрипт приложения:
@@ -66,6 +67,11 @@
 
   - основной: `apps/talent_comparator/talent_comparator.exe`
   - на примерах: `apps/talent_comparator/talent_comparator.exe -useExamples`
+
+- roster_lab:
+
+  - основной: `apps/roster_lab/roster_lab.exe`
+  - на примерах: `apps/roster_lab/roster_lab.exe -useExamples`
 
 - ui_server:
 
