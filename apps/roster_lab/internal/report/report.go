@@ -75,13 +75,17 @@ func summarySheet(plans []domain.Plan, results map[string]domain.RunResult) ods.
 func scenarioSheets(plans []domain.Plan, results map[string]domain.RunResult, specs map[string]domain.RunSpec) []ods.Sheet {
 	names := map[string]string{
 		"weapons": "Weapons", "growth": "Growth", "constellations": "Constellations",
-		"talents": "Talents", "levels": "Levels",
+		"talents": "Talents", "levels": "Levels", "sets": "Sets",
 	}
 	var sheets []ods.Sheet
 	for _, plan := range plans {
 		rows := [][]string{{"Section", "Variant", "Status", "Team DPS", "Team %", "Char DPS", "Char %", "ER", "Sim Config", "Error"}}
 		teamBase, charBase := baseline(plan.Specs, results)
-		for _, spec := range plan.Specs {
+		specsToWrite := plan.Specs
+		if plan.Scenario == "sets" {
+			specsToWrite = sortSpecsByResult(plan.Specs, results)
+		}
+		for _, spec := range specsToWrite {
 			result := results[spec.Key]
 			rows = append(rows, []string{
 				spec.Section, spec.Label, string(result.Status),
@@ -149,6 +153,24 @@ func baseline(specs []domain.RunSpec, results map[string]domain.RunResult) (map[
 		}
 	}
 	return team, char
+}
+
+func sortSpecsByResult(specs []domain.RunSpec, results map[string]domain.RunResult) []domain.RunSpec {
+	out := append([]domain.RunSpec(nil), specs...)
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := results[out[i].Key], results[out[j].Key]
+		if a.Status == domain.RunCompleted && b.Status != domain.RunCompleted {
+			return true
+		}
+		if a.Status != domain.RunCompleted && b.Status == domain.RunCompleted {
+			return false
+		}
+		if out[i].Target == domain.TargetCharDPS {
+			return a.CharDPS > b.CharDPS
+		}
+		return a.TeamDPS > b.TeamDPS
+	})
+	return out
 }
 
 func percent(value, baseline int, status domain.RunStatus) string {

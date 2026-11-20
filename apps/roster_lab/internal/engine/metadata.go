@@ -27,10 +27,12 @@ type Character struct {
 }
 
 type Metadata struct {
-	WeaponNames map[string]string
-	Weapons     map[string]Weapon
-	Characters  map[string]Character
-	Aliases     map[string]string
+	WeaponNames   map[string]string
+	ArtifactNames map[string]string
+	Weapons       map[string]Weapon
+	Artifacts     map[string]struct{}
+	Characters    map[string]Character
+	Aliases       map[string]string
 }
 
 type packageConfig struct {
@@ -69,6 +71,14 @@ func LoadMetadata(root string) (Metadata, error) {
 	if !ok {
 		return Metadata{}, fmt.Errorf("game names: missing Russian.weapon_names")
 	}
+	artifactNames, ok := names.Names("Russian", "artifact_names")
+	if !ok {
+		return Metadata{}, fmt.Errorf("game names: missing Russian.artifact_names")
+	}
+	artifacts, err := loadArtifacts(root)
+	if err != nil {
+		return Metadata{}, err
+	}
 	weapons, err := loadWeapons(root)
 	if err != nil {
 		return Metadata{}, err
@@ -86,7 +96,62 @@ func LoadMetadata(root string) (Metadata, error) {
 			weaponNames[key] = key
 		}
 	}
-	return Metadata{WeaponNames: weaponNames, Weapons: weapons, Characters: characters, Aliases: aliases}, nil
+	for key := range artifacts {
+		if artifactNames[key] == "" {
+			artifactNames[key] = key
+		}
+	}
+	return Metadata{
+		WeaponNames: weaponNames, ArtifactNames: artifactNames,
+		Weapons: weapons, Artifacts: artifacts,
+		Characters: characters, Aliases: aliases,
+	}, nil
+}
+
+func loadArtifacts(root string) (map[string]struct{}, error) {
+	result := make(map[string]struct{})
+	paths := []string{
+		filepath.Join(root, "pkg", "simulation", "imports.artifact.dm.go"),
+		filepath.Join(root, "pkg", "simulation", "imports.go"),
+	}
+	for _, path := range paths {
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("parse %s: %w", path, err)
+		}
+		for _, importPath := range blankImports(file) {
+			_, _, ok := artifactPackagePath(importPath)
+			if !ok {
+				continue
+			}
+			dirParts := strings.Split(importPath, "/")
+			packageName := dirParts[len(dirParts)-1]
+			configPath := filepath.Join(root, "internal", "artifacts", packageName, "config.yml")
+			raw, err := os.ReadFile(configPath)
+			if err != nil {
+				return nil, fmt.Errorf("read artifact config %s: %w", configPath, err)
+			}
+			var config packageConfig
+			if err := yaml.Unmarshal(raw, &config); err != nil {
+				return nil, err
+			}
+			key := strings.TrimSpace(config.Name)
+			if key == "" {
+				key = strings.TrimSpace(config.Key)
+			}
+			if key == "" {
+				return nil, fmt.Errorf("artifact config %s has no name or key", configPath)
+			}
+			result[key] = struct{}{}
+		}
+	}
+	if len(result) == 0 {
+		return nil, fmt.Errorf("no registered artifacts found")
+	}
+	return result, nil
 }
 
 func loadWeapons(root string) (map[string]Weapon, error) {
@@ -282,6 +347,7 @@ func weaponPackagePath(importPath string) (string, string, bool) {
 	if i < 0 {
 		return "", "", false
 	}
+
 	parts := strings.Split(strings.TrimPrefix(importPath[i+len(marker):], "/"), "/")
 	return func() (string, string, bool) {
 		if len(parts) != 2 {
@@ -289,6 +355,19 @@ func weaponPackagePath(importPath string) (string, string, bool) {
 		}
 		return parts[0], parts[1], true
 	}()
+}
+
+func artifactPackagePath(importPath string) (string, string, bool) {
+	const marker = "/internal/artifacts/"
+	i := strings.Index(importPath, marker)
+	if i < 0 {
+		return "", "", false
+	}
+	packageName := strings.TrimPrefix(importPath[i+len(marker):], "/")
+	if packageName == "" || strings.Contains(packageName, "/") {
+		return "", "", false
+	}
+	return packageName, "", true
 }
 
 func loadWeaponAliases(root string) (map[string]string, error) {

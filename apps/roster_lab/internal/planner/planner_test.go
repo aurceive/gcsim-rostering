@@ -1,6 +1,7 @@
 package planner
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/genshinsim/gcsim/apps/roster_lab/internal/domain"
@@ -123,6 +124,7 @@ func TestGlobalOptimizerVariantsCanBeOverriddenPerScenario(t *testing.T) {
 		},
 		WeaponNames: map[string]string{"favoniuswarbow": "favoniuswarbow"},
 	}
+
 	project := domain.ProjectConfig{
 		Version: domain.FormatVersion,
 		Project: domain.Project{Name: "test", TargetCharacter: "fischl"},
@@ -159,5 +161,49 @@ func TestGlobalOptimizerVariantsCanBeOverriddenPerScenario(t *testing.T) {
 	}
 	if plans[1].Specs[0].OptimizerOptions["total_liquid_substats"] != 30 {
 		t.Fatalf("growth options not overridden: %#v", plans[1].Specs[0].OptimizerOptions)
+	}
+}
+
+func TestSetsPlannerBuildsAllFourPieceCombinationsWithRussianLabels(t *testing.T) {
+	project := domain.ProjectConfig{
+		Version: domain.FormatVersion,
+		Project: domain.Project{Name: "test", TargetCharacter: "fischl"},
+		Scenarios: domain.Scenarios{Sets: domain.SetsScenario{
+			ScenarioBase: domain.ScenarioBase{Enabled: true},
+			Items: []string{
+				"Золотая труппа 2 4",
+				"Изумрудная тень 2 4",
+			},
+		}},
+	}
+	metadata := engine.Metadata{
+		Artifacts: map[string]struct{}{
+			"goldentroupe": {}, "viridescentvenerer": {},
+		},
+		ArtifactNames: map[string]string{
+			"goldentroupe": "Золотая труппа", "viridescentvenerer": "Изумрудная тень",
+		},
+	}
+	plans, err := Build(Context{Config: plannerConfig, Project: project, Metadata: metadata})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plans) != 1 || len(plans[0].Specs) != 3 {
+		t.Fatalf("expected 4pc/4pc/2pc+2pc combinations, got %#v", plans)
+	}
+	foundMixed := false
+	for _, spec := range plans[0].Specs {
+		if !spec.Baseline {
+			t.Fatal("set row must participate in best-result baseline")
+		}
+		if strings.Contains(spec.Label, "Золотая труппа") && strings.Contains(spec.Label, "Изумрудная тень") {
+			foundMixed = true
+		}
+		if strings.Contains(spec.Label, "goldentroupe") || strings.Contains(spec.Label, "viridescentvenerer") {
+			t.Fatalf("engine keys leaked into label: %q", spec.Label)
+		}
+	}
+	if !foundMixed {
+		t.Fatal("missing 2pc + 2pc combination")
 	}
 }

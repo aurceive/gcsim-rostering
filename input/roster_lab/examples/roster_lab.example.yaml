@@ -243,6 +243,33 @@ scenarios:
     # Alternatives: max_additional: 0
     #               # omit max_additional entirely
 
+  # Compares artifact set combinations on target_character.
+  # Items accept an engine key or exact Russian artifact name.
+  # No counts means count=4. Counts are allowed sizes; e.g. "set 2 4".
+  # The planner combines configured counts so the total is exactly four pieces.
+  # Every generated combination is optimized independently.
+  #
+  # Examples with two sets:
+  #   goldentroupe 2 4
+  #   viridescentvenerer 2 4
+  # produce 4pc goldentroupe, 4pc viridescentvenerer, and 2pc+2pc.
+  sets:
+    enabled: false
+    # target: team_dps
+    # target: char_dps
+    # target: personal_dps
+    # optimize_substats: true
+    # optimize_substats: false
+
+    # Current implementation supports only target_character.
+    # team is reserved for future per-character/team set selection.
+    scope: character
+    # scope: team
+
+    items:
+      - goldentroupe
+      - Изумрудная тень 2 4
+
   # Compares fixed character levels. Exactly five rows are generated:
   # - 80/80 with talents 8-8-8
   # - 80/90

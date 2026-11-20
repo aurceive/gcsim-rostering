@@ -10,6 +10,7 @@ const (
 	MutationConstellation MutationType = "constellation"
 	MutationTalent        MutationType = "talent"
 	MutationLevel         MutationType = "level"
+	MutationSets          MutationType = "sets"
 )
 
 type Mutation struct {

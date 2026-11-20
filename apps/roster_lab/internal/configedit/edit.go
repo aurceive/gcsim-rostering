@@ -95,6 +95,42 @@ func SetLevel(config, char, level string) (string, error) {
 	return replaceCharacterToken(config, char, levelToken, "lvl="+level, "lvl")
 }
 
+func SetSets(config, char string, sets []string) (string, error) {
+	if len(sets) == 0 {
+		return "", fmt.Errorf("at least one artifact set is required")
+	}
+	lines := strings.Split(config, "\n")
+	prefix := regexp.MustCompile(`^` + regexp.QuoteMeta(char) + `\s+add\s+set="`)
+	insertAt := -1
+	filtered := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if prefix.MatchString(line) {
+			if insertAt == -1 {
+				insertAt = len(filtered)
+			}
+			continue
+		}
+		filtered = append(filtered, line)
+	}
+	if insertAt == -1 {
+		return "", fmt.Errorf("artifact set line for character %q not found", char)
+	}
+	added := make([]string, 0, len(sets))
+	for _, set := range sets {
+		fields := strings.Fields(set)
+		if len(fields) != 2 {
+			return "", fmt.Errorf("artifact set mutation must contain key and count, got %q", set)
+		}
+		count, err := strconv.Atoi(fields[1])
+		if err != nil || count < 1 || count > 4 {
+			return "", fmt.Errorf("artifact set count must be in [1..4], got %q", set)
+		}
+		added = append(added, fmt.Sprintf(`%s add set="%s" count=%d;`, char, fields[0], count))
+	}
+	filtered = append(filtered[:insertAt], append(added, filtered[insertAt:]...)...)
+	return strings.Join(filtered, "\n"), nil
+}
+
 func SetConstellation(config, char string, level int) (string, error) {
 	if level < 0 || level > 6 {
 		return "", fmt.Errorf("constellation must be in [0..6], got %d", level)

@@ -57,6 +57,7 @@ type Scenarios struct {
 	Constellations ConstellationScenario `yaml:"constellations"`
 	Talents        TalentScenario        `yaml:"talents"`
 	Levels         LevelScenario         `yaml:"levels"`
+	Sets           SetsScenario          `yaml:"sets"`
 }
 
 type ScenarioBase struct {
@@ -132,6 +133,12 @@ type TalentScenario struct {
 type LevelScenario struct {
 	ScenarioBase `yaml:",inline"`
 	Scope        string `yaml:"scope"`
+}
+
+type SetsScenario struct {
+	ScenarioBase `yaml:",inline"`
+	Scope        string   `yaml:"scope"`
+	Items        []string `yaml:"items"`
 }
 
 func (c *ProjectConfig) Validate() error {

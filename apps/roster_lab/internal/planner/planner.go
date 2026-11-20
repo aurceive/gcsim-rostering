@@ -23,7 +23,7 @@ type Context struct {
 func Build(ctx Context) ([]domain.Plan, error) {
 	var plans []domain.Plan
 	builders := []func(Context) (domain.Plan, bool, error){
-		buildWeapons, buildGrowth, buildConstellations, buildTalents, buildLevels,
+		buildWeapons, buildGrowth, buildConstellations, buildTalents, buildLevels, buildSets,
 	}
 	for _, build := range builders {
 		plan, enabled, err := build(ctx)
@@ -391,6 +391,62 @@ func buildLevels(ctx Context) (domain.Plan, bool, error) {
 				Target: target, Optimize: optimize, OptimizerOptions: variant.Options,
 				Label:    item.label + " [" + variant.Name + "]",
 				Baseline: item.level == "90/90", BaselineGroup: variant.Name, Mutations: mutations,
+			}
+			spec.Key = stableKey(spec)
+			plan.Specs = append(plan.Specs, spec)
+		}
+	}
+	return plan, true, nil
+}
+
+func buildSets(ctx Context) (domain.Plan, bool, error) {
+	cfg := ctx.Project.Scenarios.Sets
+	if !cfg.Enabled {
+		return domain.Plan{}, false, nil
+	}
+	target, optimize, err := scenarioOptions(ctx.Project, cfg.Target, cfg.Optimize)
+	if err != nil {
+		return domain.Plan{}, true, fmt.Errorf("sets: %w", err)
+	}
+	if cfg.Scope != "" && cfg.Scope != string(domain.ScopeCharacter) {
+		return domain.Plan{}, true, fmt.Errorf("sets: only character scope is currently supported")
+	}
+	requests, err := resolveArtifactSets(cfg.Items, ctx.Metadata)
+	if err != nil {
+		return domain.Plan{}, true, fmt.Errorf("sets: %w", err)
+	}
+	if len(requests) == 0 {
+		return domain.Plan{}, true, fmt.Errorf("sets: at least one item is required")
+	}
+	variants, err := optimizerVariants(ctx.Project.Variants, cfg.Variants, optimize)
+	if err != nil {
+		return domain.Plan{}, true, fmt.Errorf("sets: %w", err)
+	}
+	plan := domain.Plan{Scenario: "sets"}
+	for _, combination := range artifactCombinations(requests, 4) {
+		for _, variant := range variants {
+			values := make([]string, 0, len(combination))
+			labels := make([]string, 0, len(combination))
+			for _, item := range combination {
+				values = append(values, item.Key+" "+strconv.Itoa(item.Count))
+				name := ctx.Metadata.ArtifactNames[item.Key]
+				if item.Count == 4 {
+					labels = append(labels, name)
+				} else {
+					labels = append(labels, fmt.Sprintf("%d %s", item.Count, name))
+				}
+			}
+			spec := domain.RunSpec{
+				Scenario: "sets", Character: ctx.Project.Project.TargetCharacter,
+				Scope: domain.ScopeCharacter, Target: target, Optimize: optimize,
+				OptimizerOptions: variant.Options, TalentLevel: variant.TalentLevel,
+				Label:         strings.Join(labels, " + ") + " [" + variant.Name + "]",
+				Baseline:      true,
+				BaselineGroup: variant.Name,
+				Mutations: []domain.Mutation{{
+					Type: domain.MutationSets, Character: ctx.Project.Project.TargetCharacter,
+					Values: values,
+				}},
 			}
 			spec.Key = stableKey(spec)
 			plan.Specs = append(plan.Specs, spec)

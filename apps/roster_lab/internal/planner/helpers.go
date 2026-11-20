@@ -251,6 +251,103 @@ type constellationEntry struct {
 	levels []int
 }
 
+type artifactRequest struct {
+	Key    string
+	Counts []int
+	Index  int
+}
+
+type artifactCombinationItem struct {
+	Key   string
+	Count int
+}
+
+func resolveArtifactSets(raw []string, metadata engine.Metadata) ([]artifactRequest, error) {
+	names := make(map[string]string, len(metadata.ArtifactNames))
+	ambiguous := make(map[string]bool)
+	for key, name := range metadata.ArtifactNames {
+		if previous, ok := names[name]; ok && previous != key {
+			ambiguous[name] = true
+		} else {
+			names[name] = key
+		}
+	}
+	var result []artifactRequest
+	seen := make(map[string]bool)
+	for _, entry := range raw {
+		fields := strings.Fields(entry)
+		if len(fields) == 0 {
+			continue
+		}
+		nameEnd := len(fields)
+		var counts []int
+		for nameEnd > 0 {
+			count, err := strconv.Atoi(fields[nameEnd-1])
+			if err != nil {
+				break
+			}
+			if count < 1 || count > 4 {
+				return nil, fmt.Errorf("invalid count %d in %q", count, entry)
+			}
+			counts = append(counts, count)
+			nameEnd--
+		}
+		name := strings.Join(fields[:nameEnd], " ")
+		key := name
+		if _, ok := metadata.Artifacts[key]; !ok {
+			key = names[name]
+		}
+		if ambiguous[name] {
+			return nil, fmt.Errorf("ambiguous Russian artifact name %q", name)
+		}
+		if _, ok := metadata.Artifacts[key]; !ok {
+			return nil, fmt.Errorf("unknown artifact set %q", name)
+		}
+		if seen[key] {
+			return nil, fmt.Errorf("duplicate artifact set %q", key)
+		}
+		seen[key] = true
+		if len(counts) == 0 {
+			counts = []int{4}
+		}
+		sort.Ints(counts)
+		uniqueCounts := counts[:0]
+		for _, count := range counts {
+			if len(uniqueCounts) == 0 || uniqueCounts[len(uniqueCounts)-1] != count {
+				uniqueCounts = append(uniqueCounts, count)
+			}
+		}
+		result = append(result, artifactRequest{Key: key, Counts: uniqueCounts, Index: len(result)})
+	}
+	return result, nil
+}
+
+func artifactCombinations(requests []artifactRequest, total int) [][]artifactCombinationItem {
+	var result [][]artifactCombinationItem
+	var selected []artifactCombinationItem
+	var visit func(int, int)
+	visit = func(index, remaining int) {
+		if index == len(requests) {
+			if remaining == 0 {
+				result = append(result, append([]artifactCombinationItem(nil), selected...))
+			}
+			return
+		}
+		request := requests[index]
+		visit(index+1, remaining)
+		for _, count := range request.Counts {
+			if count > remaining {
+				continue
+			}
+			selected = append(selected, artifactCombinationItem{Key: request.Key, Count: count})
+			visit(index+1, remaining-count)
+			selected = selected[:len(selected)-1]
+		}
+	}
+	visit(0, total)
+	return result
+}
+
 func parseConstellationEntry(raw string, baseline int) (constellationEntry, error) {
 	fields := strings.Fields(raw)
 	if len(fields) == 0 {
