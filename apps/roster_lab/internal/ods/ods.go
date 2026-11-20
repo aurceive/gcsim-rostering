@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"os"
 	"path/filepath"
@@ -34,7 +35,8 @@ func Write(path string, workbook Workbook) error {
 		return err
 	}
 	zw := zip.NewWriter(file)
-	if err := addStored(zw, "mimetype", []byte("application/vnd.oasis.opendocument.spreadsheet")); err != nil {
+	mimeType := []byte("application/vnd.oasis.opendocument.spreadsheet")
+	if err := addStored(zw, "mimetype", mimeType); err != nil {
 		_ = zw.Close()
 		_ = file.Close()
 		return err
@@ -43,7 +45,9 @@ func Write(path string, workbook Workbook) error {
 <manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2">
   <manifest:file-entry manifest:full-path="/" manifest:version="1.2" manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/>
   <manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>
+  <manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>
   <manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/>
+  <manifest:file-entry manifest:full-path="settings.xml" manifest:media-type="text/xml"/>
 </manifest:manifest>`
 	if err := addDeflated(zw, "META-INF/manifest.xml", []byte(manifest)); err != nil {
 		_ = zw.Close()
@@ -55,6 +59,26 @@ func Write(path string, workbook Workbook) error {
   <office:meta><meta:generator>roster_lab</meta:generator><meta:creation-date>%s</meta:creation-date></office:meta>
 </office:document-meta>`, time.Now().UTC().Format(time.RFC3339))
 	if err := addDeflated(zw, "meta.xml", []byte(meta)); err != nil {
+		_ = zw.Close()
+		_ = file.Close()
+		return err
+	}
+	styles := `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-styles office:version="1.2" xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0">
+  <office:styles/>
+  <office:automatic-styles/>
+  <office:master-styles/>
+</office:document-styles>`
+	if err := addDeflated(zw, "styles.xml", []byte(styles)); err != nil {
+		_ = zw.Close()
+		_ = file.Close()
+		return err
+	}
+	settings := `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-settings office:version="1.2" xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0">
+  <office:settings/>
+</office:document-settings>`
+	if err := addDeflated(zw, "settings.xml", []byte(settings)); err != nil {
 		_ = zw.Close()
 		_ = file.Close()
 		return err
@@ -197,8 +221,14 @@ func escape(builder *strings.Builder, value string) {
 }
 
 func addStored(zw *zip.Writer, name string, data []byte) error {
-	header := &zip.FileHeader{Name: name, Method: zip.Store}
-	writer, err := zw.CreateHeader(header)
+	header := &zip.FileHeader{
+		Name: name, Method: zip.Store,
+		CRC32:              crc32.ChecksumIEEE(data),
+		CompressedSize64:   uint64(len(data)),
+		UncompressedSize64: uint64(len(data)),
+		Flags:              0,
+	}
+	writer, err := zw.CreateRaw(header)
 	if err != nil {
 		return err
 	}
