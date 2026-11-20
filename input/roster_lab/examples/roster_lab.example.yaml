@@ -1,77 +1,46 @@
 # roster_lab configuration contract
+# Runnable example and complete list of supported settings and alternatives.
+# Add new YAML capabilities here. Configuration keys are checked; optimizer
+# option keys are engine-specific.
 #
-# This file is both a runnable example and the canonical list of supported YAML
-# settings. New YAML capabilities must be added here as active settings or
-# documented, commented alternatives.
-#
-# All keys are parsed strictly: unknown keys are errors.
-#
-# File defaults:
-# - normal run: input/roster_lab/roster_lab.yaml
-# - normal sim config: input/roster_lab/sim_config.dart
-# - -useExamples: this file plus
-#   input/roster_lab/examples/sim_config.example.dart
+# Default files: input/roster_lab/roster_lab.yaml and sim_config.dart.
+# -useExamples selects this file and sim_config.example.dart instead.
 
-version: 1 # Required. The only supported project format version is currently 1.
+version: 1 # Required; currently the only supported version.
 
 project:
   name: roster_lab_demo # Required; used in the output filename.
-  target_character: arlecchino # Required; one character is currently supported.
+  target_character: arlecchino # Required; currently only one character.
+  # sim_config: custom_sim_config.dart # Default: adjacent sim_config.dart (or example).
+  # Relative paths are resolved from this YAML file's directory; absolute paths work too.
 
-  # Optional. If omitted, roster_lab uses sim_config.dart next to roster_lab.yaml.
-  # With -useExamples it uses sim_config.example.dart.
-  # A relative value is resolved from the YAML file's directory; absolute paths
-  # are also accepted.
-  # sim_config: custom_sim_config.dart
-
-# Optional. Default: gcsim.
-# Supported names are directories under engines/.
-engine: gcsim
+engine: gcsim # Default; engine names are directories under engines/.
 # engine: wfpsim
 # engine: custom
 # engine: wfpsim-custom
 # engine: kqmsim
 # engine: kqmsim-custom
+# engine_path: C:/path/to/engine-checkout # Overrides engine; resolved by the engine resolver.
 
-# Optional explicit engine repository path. When set, it overrides engine.
-# A relative path is interpreted by the current engine resolver.
-# engine_path: C:/path/to/engine-checkout
+target: team_dps # Default: team damage.
+# target: char_dps # Target character damage.
+# target: personal_dps # Alias of char_dps.
 
-# Global target. Default: team_dps.
-# Allowed values:
-# - team_dps
-# - char_dps
-# - personal_dps (alias of char_dps)
-# Scenario-level target overrides the global value.
-target: team_dps
-# target: char_dps
-# target: personal_dps
-
-# Global substat optimization. Default: true.
-# Optimization is enabled by passing -substatOptimFull to the engine CLI.
-# A scenario can override this value.
-optimize_substats: true
+optimize_substats: true # Default; enables the engine's -substatOptimFull.
 # optimize_substats: false
 
-# Global optimizer standards. They are applied to every scenario whose effective
-# optimize_substats is true. Each variant multiplies that scenario's run set.
-# A scenario-level optimizer_variants replaces this list completely.
-# If both lists are omitted, one "kqms" variant without options is used.
-# If optimization is false, no optimizer options are applied and variants do
-# not multiply the scenario run set.
-# Names are required when multiple variants are configured.
+# Global optimizer standards apply to every scenario with optimization enabled.
+# Each variant multiplies its runs; a scenario's list replaces the global list.
+# Without either list, one "kqms" variant without options is used.
+# With optimization disabled, options are ignored and variants do not multiply runs.
+# Multiple variants require distinct names. Option keys: letters, digits, underscores.
 optimizer_variants:
   - name: kqms
     options:
-      # options.talent_level changes only target_character and is not forwarded
-      # to the engine -options string.
-      talent_level: 10
-      # Engine option keys may contain only letters, digits and underscores.
+      talent_level: 10 # Target character only; not passed as an engine option.
       total_liquid_substats: 20
       indiv_liquid_cap: 10
       fixed_substats_count: 2
-
-  # Additional global standards can be listed:
   # - name: high
   #   options:
   #     talent_level: 10
@@ -80,81 +49,45 @@ optimizer_variants:
   #     fixed_substats_count: 1
 
 output:
-  # Default: output/roster_lab. Relative paths are resolved from repository root.
-  directory: output/roster_lab
+  directory: output/roster_lab # Default; relative to repository root.
 
 resume:
-  # Default: auto.
-  # YAML modes: auto, off, all.
-  # A CLI path can be provided with:
-  #   -resume output/roster_lab/result.ods
-  #
-  # auto: latest compatible ODS in output/roster_lab from max_age_hours.
-  # off:  ignore old results.
-  # all:  latest ODS in output/roster_lab regardless of age.
-  #
-  # Completed runs are reused. Failed runs mean "not computed" and are repeated.
-  # In auto/all, incompatible project metadata requires an interactive choice.
-  # An explicit -resume path merges without that prompt.
-  mode: auto
-  # mode: off
-  # mode: all
+  mode: auto # Default; latest ODS within max_age_hours.
+  # mode: off # Ignore old results.
+  # mode: all # Latest ODS regardless of age.
+  max_age_hours: 24 # Default; applies only to auto.
+  # A CLI path is also supported: -resume output/roster_lab/result.ods
+  # Completed runs are reused; failed runs are repeated. auto/all prompt when
+  # project metadata differs; an explicit path merges without a prompt.
 
-  # Applies to auto mode. Default: 24.
-  max_age_hours: 24
-
+# Scenarios are independent, not cross-multiplied; enabled defaults to false.
+# Every scenario can override target, optimize_substats and optimizer_variants
+# (see weapons and growth); scenario variants completely replace global ones.
 scenarios:
-  # Each scenario has:
-  # - enabled: false by default; disabled scenarios do not create an ODS sheet
-  # - target: optional scenario override of the global target
-  # - optimize_substats: optional scenario override of global optimization
-  # - optimizer_variants: optional complete replacement of the global variants
-  #
-  # Scenarios are independent. Their run sets are not cross-multiplied.
-
   weapons:
     enabled: true
-    # target: team_dps
     # target: char_dps
-    # target: personal_dps
-    # optimize_substats: true
     # optimize_substats: false
 
-    # Default baseline: the weapon equipped by target_character in sim config.
-    # Explicit baseline weapon can have an optional single refine:
-    #   available_weapon: deathmatch
-    #   available_weapon: deathmatch 1
-    available_weapon: deathmatch 1
+    available_weapon: deathmatch 1 # Baseline; default: equipped weapon.
+    # available_weapon: deathmatch # Refine is optional.
+    minimum_rarity: 5 # Default: 3; explicit items may be below the threshold.
+    # minimum_rarity: 3
 
-    # Default: 3. Explicit items below this rarity remain allowed.
-    minimum_rarity: 5
-
-    # List form replaces the default class+rarity weapon set.
-    # Each item accepts an engine key or exact Russian display name, followed
-    # by zero or more refines.
-    # No refine: use source-based defaults:
-    # - 3*: R5
-    # - 5*: R1
-    # - 4*: R5 for weapons with a non-limited source, otherwise R1+R5
-    # Explicit examples:
-    #   - deathmatch 1
-    #   - deathmatch 1 5
-    #   - Небесное крыло 2 3
+    # A nonempty list replaces the default class+rarity selection. Items accept
+    # engine keys or exact Russian names, followed by zero or more refines.
+    # Without refines: 3* R5, 5* R1, 4* R5 for non-limited sources, else R1+R5.
     items:
       - deathmatch 1
+      # - deathmatch 1 5
+      # - Небесное крыло 2 3
 
-    # Map form can append selected weapons to the default class+rarity set:
+    # Alternative map form; append: true adds to the default selection.
     # items:
-    #   append: true
+    #   append: true # false replaces the default selection.
     #   items:
     #     - deathmatch 1
-    #
-    # items can therefore be either:
-    # - a YAML list
-    # - {append: false, items: [...]}
-    # - {append: true,  items: [...]}
 
-    # Optional complete replacement of global optimizer_variants:
     # optimizer_variants:
     #   - name: weapon-only
     #     options:
@@ -163,10 +96,8 @@ scenarios:
     #       indiv_liquid_cap: 10
     #       fixed_substats_count: 2
 
-    # If main_stats is omitted or all three lists are absent, the base stats
-    # from sim_config.dart are used once.
-    # If used, all three lists are required and roster_lab generates the
-    # deduplicated Cartesian product of sands × goblet × circlet.
+    # Omit main_stats (or all three lists) to use sim_config.dart's base stats.
+    # Otherwise all lists are required; their Cartesian product is deduplicated.
     main_stats:
       sands:
         - atk%=0.466
@@ -180,14 +111,7 @@ scenarios:
         # - cr=0.311
 
   growth:
-    enabled: false
-    # target: team_dps
-    # target: char_dps
-    # target: personal_dps
-    # optimize_substats: true
-    # optimize_substats: false
-
-    # Optional complete replacement of global optimizer_variants:
+    # enabled: true
     # optimizer_variants:
     #   - name: growth-only
     #     options:
@@ -195,123 +119,48 @@ scenarios:
     #       total_liquid_substats: 20
     #       indiv_liquid_cap: 10
     #       fixed_substats_count: 2
-
-    # Optional sands × goblet × circlet product for target_character.
-    # Omit it to preserve the base stats from sim_config.dart.
-    # main_stats:
+    # main_stats: # Same rules as weapons; omitted uses the base stats.
     #   sands: [atk%=0.466, er=0.518]
     #   goblet: [pyro%=0.466]
     #   circlet: [cr=0.311, cd=0.622]
 
   constellations:
-    enabled: false
-    # target: team_dps
-    # target: char_dps
-    # target: personal_dps
-    # optimize_substats: true
-    # optimize_substats: false
-
-    # Current implementation supports only character.
-    # team is reserved for a future team-scenario implementation and is
-    # currently rejected explicitly.
-    scope: character
-    # scope: team
-
-    # If omitted: target_character is varied from its current constellation
-    # through C6.
-    #
-    # Entry syntax: "<character> [bound] [bound] [+N] [-N]"
-    # - one unsigned bound: baseline..N
-    # - two unsigned bounds: lower..upper
-    # - +N force-includes C N
-    # - -N force-excludes C N and has highest priority
-    #
-    # Examples:
-    #   - arlecchino
-    #   - arlecchino 4
-    #   - arlecchino 2 5
-    #   - arlecchino +0 -3
-    #   - arlecchino 2 5 +0 -3
-    #
-    # The character name must equal project.target_character and only one entry
-    # is currently supported.
+    # enabled: true
+    scope: character # Default; only target_character is supported.
+    # scope: team # Reserved; currently rejected.
+    # Omit characters to vary target_character from its current C through C6.
+    # One entry only: "<character> [bound] [bound] [+N] [-N]".
+    # One bound means baseline..N; two mean lower..upper.
+    # +N includes C N; -N excludes it and takes precedence.
     characters: [arlecchino 0 1]
+    # characters: [arlecchino]
+    # characters: [arlecchino 4]
+    # characters: [arlecchino 2 5 +0 -3]
+    max_additional: 1 # Nonnegative cap on additional levels; omit for no cap.
+    # max_additional: 0
 
-    # Optional cap on the number of additional constellation levels.
-    # Omit it for no cap. It must be zero or positive when present.
-    max_additional: 1
-    # Alternatives: max_additional: 0
-    #               # omit max_additional entirely
-
-  # Compares artifact set combinations on target_character.
-  # Items accept an engine key or exact Russian artifact name.
-  # No counts means count=4. Counts are allowed sizes; e.g. "set 2 4".
-  # The planner combines configured counts so the total is exactly four pieces.
-  # Every generated combination is optimized independently.
-  #
-  # Examples with two sets:
-  #   goldentroupe 2 4
-  #   viridescentvenerer 2 4
-  # produce 4pc goldentroupe, 4pc viridescentvenerer, and 2pc+2pc.
   sets:
-    enabled: false
-    # target: team_dps
-    # target: char_dps
-    # target: personal_dps
-    # optimize_substats: true
-    # optimize_substats: false
-
-    # Current implementation supports only target_character.
-    # team is reserved for future per-character/team set selection.
-    scope: character
-    # scope: team
-
+    # enabled: true
+    scope: character # Default; scope: team is reserved and rejected.
+    # Engine keys or exact Russian names; no count means 4 pieces.
+    # Counts are allowed sizes; combinations must total exactly 4 pieces.
+    # Two sets with "2 4" produce both 4pc sets and their 2pc+2pc mix.
     items:
       - goldentroupe
       - Изумрудная тень 2 4
 
-  # Compares fixed character levels. Exactly five rows are generated:
-  # - 80/80 with talents 8-8-8
-  # - 80/90
-  # - 90/90
-  # - 95/95
-  # - 100/100
-  #
-  # 90/90 is the 100% baseline.
   levels:
-    enabled: false
-    # target: team_dps
-    # target: char_dps
-    # target: personal_dps
-    # optimize_substats: true
-    # optimize_substats: false
-
-    # Current implementation supports only character.
-    # team is reserved and currently rejected.
-    scope: character
-    # scope: team
+    # enabled: true
+    scope: character # Default; scope: team is reserved and rejected.
+    # Fixed rows: 80/80 (talents 8-8-8), 80/90, 90/90, 95/95, 100/100.
+    # 90/90 is the 100% baseline.
 
   talents:
-    enabled: false
-    # target: team_dps
-    # target: char_dps
-    # target: personal_dps
-    # optimize_substats: true
-    # optimize_substats: false
+    # enabled: true
+    scope: character # Default; scope: team is reserved and rejected.
+    matrix: default # Default and currently the only supported matrix.
+    # Base: 1-1-1, 6-6-6, 8-8-8, 9-9-9, 10-10-10.
+    # auto: 7-6-6 through 10-6-6; skill: 6-7-6 through 6-10-6;
+    # burst: 6-6-7 through 6-6-10.
 
-    # Current implementation supports only character scope. team is reserved,
-    # but not implemented and will be rejected.
-    scope: character
-    # scope: team
-
-    # The only supported matrix is default. The generated combinations are:
-    # base: 1-1-1, 6-6-6, 8-8-8, 9-9-9, 10-10-10
-    # auto:  7-6-6, 8-6-6, 9-6-6, 10-6-6
-    # skill: 6-7-6, 6-8-6, 6-9-6, 6-10-6
-    # burst: 6-6-7, 6-6-8, 6-6-9, 6-6-10
-    # If omitted, matrix also defaults to default.
-    matrix: default
-
-  # For talent and level scenarios, optimizer option maps are applied normally,
-  # but their special talent_level is ignored because the scenario itself owns
-  # the talent mutations.
+  # Levels and talents ignore optimizer talent_level: they own talent mutations.

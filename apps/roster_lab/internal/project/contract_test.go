@@ -34,7 +34,7 @@ func TestExampleIsConfigurationContract(t *testing.T) {
 		"sets:", "goldentroupe", "Изумрудная тень 2 4",
 		"levels:", "80/80", "80/90", "90/90", "95/95", "100/100",
 		"matrix:", "1-1-1", "6-6-6", "10-10-10",
-		"auto: latest compatible ODS", "off:  ignore old results", "all:  latest ODS",
+		"mode: auto", "mode: off", "mode: all", "max_age_hours",
 		"team_dps", "char_dps", "personal_dps",
 	}
 	for _, marker := range required {
