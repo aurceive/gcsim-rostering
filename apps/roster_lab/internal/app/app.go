@@ -45,7 +45,7 @@ func run(root string, opts Options) error {
 	if err != nil {
 		return err
 	}
-	engineRoot, err := engine.ResolveRoot(root, loaded.Config.Engine.Name, loaded.Config.Engine.Path)
+	engineRoot, err := engine.ResolveRoot(root, loaded.Config.Engine, loaded.Config.EnginePath)
 	if err != nil {
 		return err
 	}
@@ -82,7 +82,7 @@ func run(root string, opts Options) error {
 	checkpoint := resume.Checkpoint{
 		ProjectName: loaded.Config.Project.Name,
 		ConfigHash:  loaded.ConfigHash, SimHash: loaded.SimHash,
-		EngineName: loaded.Config.Engine.Name, EnginePath: engineRoot,
+		EngineName: loaded.Config.Engine, EnginePath: engineRoot,
 	}
 	mode := strings.TrimSpace(opts.Resume)
 	if mode == "" {

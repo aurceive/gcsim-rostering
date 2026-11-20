@@ -1,43 +1,184 @@
-version: 1
+# roster_lab configuration contract
+#
+# This file is both a runnable example and the canonical list of supported YAML
+# settings. New YAML capabilities must be added here as active settings or
+# documented, commented alternatives.
+#
+# All keys are parsed strictly: unknown keys are errors.
+#
+# File defaults:
+# - normal run: input/roster_lab/roster_lab.yaml
+# - normal sim config: input/roster_lab/sim_config.dart
+# - -useExamples: this file plus
+#   input/roster_lab/examples/sim_config.example.dart
+
+version: 1 # Required. The only supported project format version is currently 1.
 
 project:
-  name: roster_lab_demo
-  target_character: arlecchino
+  name: roster_lab_demo # Required; used in the output filename.
+  target_character: arlecchino # Required; one character is currently supported.
 
-engine:
-  name: gcsim
+  # Optional. If omitted, roster_lab uses sim_config.dart next to roster_lab.yaml.
+  # With -useExamples it uses sim_config.example.dart.
+  # A relative value is resolved from the YAML file's directory; absolute paths
+  # are also accepted.
+  # sim_config: custom_sim_config.dart
 
+# Optional. Default: gcsim.
+# Supported names are directories under engines/.
+engine: gcsim
+# engine: wfpsim
+# engine: custom
+# engine: wfpsim-custom
+# engine: kqmsim
+# engine: kqmsim-custom
+
+# Optional explicit engine repository path. When set, it overrides engine.
+# A relative path is interpreted by the current engine resolver.
+# engine_path: C:/path/to/engine-checkout
+
+# Global target. Default: team_dps.
+# Allowed values:
+# - team_dps
+# - char_dps
+# - personal_dps (alias of char_dps)
+# Scenario-level target overrides the global value.
 target: team_dps
+# target: char_dps
+# target: personal_dps
+
+# Global substat optimization. Default: true.
+# Optimization is enabled by passing -substatOptimFull to the engine CLI.
+# A scenario can override this value.
 optimize_substats: true
+# optimize_substats: false
 
 output:
+  # Default: output/roster_lab. Relative paths are resolved from repository root.
   directory: output/roster_lab
 
 resume:
+  # Default: auto.
+  # YAML modes: auto, off, all.
+  # A CLI path can be provided with:
+  #   -resume output/roster_lab/result.ods
+  #
+  # auto: latest compatible ODS in output/roster_lab from max_age_hours.
+  # off:  ignore old results.
+  # all:  latest ODS in output/roster_lab regardless of age.
+  #
+  # Completed runs are reused. Failed runs mean "not computed" and are repeated.
+  # In auto/all, incompatible project metadata requires an interactive choice.
+  # An explicit -resume path merges without that prompt.
   mode: auto
+  # mode: off
+  # mode: all
+
+  # Applies to auto mode. Default: 24.
   max_age_hours: 24
 
 scenarios:
+  # Each scenario has:
+  # - enabled: false by default; disabled scenarios do not create an ODS sheet
+  # - target: optional scenario override of the global target
+  # - optimize_substats: optional scenario override of global optimization
+  #
+  # Scenarios are independent. Their run sets are not cross-multiplied.
+
   weapons:
     enabled: true
+    # target: team_dps
+    # target: char_dps
+    # target: personal_dps
+    # optimize_substats: true
+    # optimize_substats: false
+
+    # Default baseline: the weapon equipped by target_character in sim config.
+    # Explicit baseline weapon can have an optional single refine:
+    #   available_weapon: deathmatch
+    #   available_weapon: deathmatch 1
     available_weapon: deathmatch 1
+
+    # Default: 3. Explicit items below this rarity remain allowed.
     minimum_rarity: 5
+
+    # List form replaces the default class+rarity weapon set.
+    # Each item accepts an engine key or exact Russian display name, followed
+    # by zero or more refines.
+    # No refine: use source-based defaults:
+    # - 3*: R5
+    # - 5*: R1
+    # - 4*: R5 for weapons with a non-limited source, otherwise R1+R5
+    # Explicit examples:
+    #   - deathmatch 1
+    #   - deathmatch 1 5
+    #   - Небесное крыло 2 3
     items:
       - deathmatch 1
+
+    # Map form can append selected weapons to the default class+rarity set:
+    # items:
+    #   append: true
+    #   items:
+    #     - deathmatch 1
+    #
+    # items can therefore be either:
+    # - a YAML list
+    # - {append: false, items: [...]}
+    # - {append: true,  items: [...]}
+
+    # Default when omitted: one "default" variant with no optimizer options.
+    # Names are required when multiple variants are configured.
     optimizer_variants:
-      - name: demo
+      - name: kqms
+
+        # options.talent_level is a roster_lab mutation for target_character.
+        # It is removed before sending other options to -options.
+        # Current implementation also accepts talent_level next to name for
+        # compatibility, but options.talent_level is the canonical form.
         options:
-          talent_level: 9
+          talent_level: 10
+          # Remaining entries are arbitrary engine optimizer keys and values.
+          # Keys may contain only letters, digits and underscores.
+          # They are sorted and passed as key=value;key2=value2.
           total_liquid_substats: 20
           indiv_liquid_cap: 10
           fixed_substats_count: 2
+
+      # Additional unique variants can be listed:
+      # - name: high
+      #   options:
+      #     talent_level: 10
+      #     total_liquid_substats: 30
+      #     indiv_liquid_cap: 12
+      #     fixed_substats_count: 1
+
+    # If main_stats is omitted or all three lists are absent, the base stats
+    # from sim_config.dart are used once.
+    # If used, all three lists are required and roster_lab generates the
+    # deduplicated Cartesian product of sands × goblet × circlet.
     main_stats:
-      sands: [atk%=0.466]
-      goblet: [pyro%=0.466]
-      circlet: [cd=0.622]
+      sands:
+        - atk%=0.466
+        # - er=0.518
+        # - em=187
+      goblet:
+        - pyro%=0.466
+        # - em=187
+      circlet:
+        - cd=0.622
+        # - cr=0.311
 
   growth:
     enabled: false
+    # target: team_dps
+    # target: char_dps
+    # target: personal_dps
+    # optimize_substats: true
+    # optimize_substats: false
+
+    # Same shape and talent_level rules as weapons.optimizer_variants.
+    # Default when omitted: one "default" investment level.
     investment_levels:
       - name: demo
         options:
@@ -46,13 +187,70 @@ scenarios:
           indiv_liquid_cap: 10
           fixed_substats_count: 2
 
+    # Optional sands × goblet × circlet product for target_character.
+    # Omit it to preserve the base stats from sim_config.dart.
+    # main_stats:
+    #   sands: [atk%=0.466, er=0.518]
+    #   goblet: [pyro%=0.466]
+    #   circlet: [cr=0.311, cd=0.622]
+
   constellations:
     enabled: false
+    # target: team_dps
+    # target: char_dps
+    # target: personal_dps
+    # optimize_substats: true
+    # optimize_substats: false
+
+    # Current implementation supports only character.
+    # team is reserved for a future team-scenario implementation and is
+    # currently rejected explicitly.
     scope: character
+    # scope: team
+
+    # If omitted: target_character is varied from its current constellation
+    # through C6.
+    #
+    # Entry syntax: "<character> [bound] [bound] [+N] [-N]"
+    # - one unsigned bound: baseline..N
+    # - two unsigned bounds: lower..upper
+    # - +N force-includes C N
+    # - -N force-excludes C N and has highest priority
+    #
+    # Examples:
+    #   - arlecchino
+    #   - arlecchino 4
+    #   - arlecchino 2 5
+    #   - arlecchino +0 -3
+    #   - arlecchino 2 5 +0 -3
+    #
+    # The character name must equal project.target_character and only one entry
+    # is currently supported.
     characters: [arlecchino 0 1]
+
+    # Optional cap on the number of additional constellation levels.
+    # Omit it for no cap. It must be zero or positive when present.
     max_additional: 1
+    # Alternatives: max_additional: 0
+    #               # omit max_additional entirely
 
   talents:
     enabled: false
+    # target: team_dps
+    # target: char_dps
+    # target: personal_dps
+    # optimize_substats: true
+    # optimize_substats: false
+
+    # Current implementation supports only character scope. team is reserved,
+    # but not implemented and will be rejected.
     scope: character
+    # scope: team
+
+    # The only supported matrix is default. The generated combinations are:
+    # base: 1-1-1, 6-6-6, 8-8-8, 9-9-9, 10-10-10
+    # auto:  7-6-6, 8-6-6, 9-6-6, 10-6-6
+    # skill: 6-7-6, 6-8-6, 6-9-6, 6-10-6
+    # burst: 6-6-7, 6-6-8, 6-6-9, 6-6-10
+    # If omitted, matrix also defaults to default.
     matrix: default

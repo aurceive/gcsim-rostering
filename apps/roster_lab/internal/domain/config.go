@@ -24,25 +24,21 @@ const (
 )
 
 type ProjectConfig struct {
-	Version   int          `yaml:"version"`
-	Project   Project      `yaml:"project"`
-	Engine    EngineConfig `yaml:"engine"`
-	Target    string       `yaml:"target"`
-	Optimize  *bool        `yaml:"optimize_substats"`
-	Output    OutputConfig `yaml:"output"`
-	Resume    ResumeConfig `yaml:"resume"`
-	Scenarios Scenarios    `yaml:"scenarios"`
+	Version    int          `yaml:"version"`
+	Project    Project      `yaml:"project"`
+	Engine     string       `yaml:"engine"`
+	EnginePath string       `yaml:"engine_path"`
+	Target     string       `yaml:"target"`
+	Optimize   *bool        `yaml:"optimize_substats"`
+	Output     OutputConfig `yaml:"output"`
+	Resume     ResumeConfig `yaml:"resume"`
+	Scenarios  Scenarios    `yaml:"scenarios"`
 }
 
 type Project struct {
 	Name            string `yaml:"name"`
 	SimConfig       string `yaml:"sim_config"`
 	TargetCharacter string `yaml:"target_character"`
-}
-
-type EngineConfig struct {
-	Name string `yaml:"name"`
-	Path string `yaml:"path"`
 }
 
 type OutputConfig struct {
@@ -141,6 +137,9 @@ func (c *ProjectConfig) Validate() error {
 	}
 	if strings.TrimSpace(c.Project.TargetCharacter) == "" {
 		return fmt.Errorf("project.target_character is required")
+	}
+	if strings.TrimSpace(c.Engine) == "" {
+		c.Engine = "gcsim"
 	}
 	if _, err := ParseTarget(c.Target); err != nil {
 		return fmt.Errorf("target: %w", err)
