@@ -24,15 +24,16 @@ const (
 )
 
 type ProjectConfig struct {
-	Version    int          `yaml:"version"`
-	Project    Project      `yaml:"project"`
-	Engine     string       `yaml:"engine"`
-	EnginePath string       `yaml:"engine_path"`
-	Target     string       `yaml:"target"`
-	Optimize   *bool        `yaml:"optimize_substats"`
-	Output     OutputConfig `yaml:"output"`
-	Resume     ResumeConfig `yaml:"resume"`
-	Scenarios  Scenarios    `yaml:"scenarios"`
+	Version    int                `yaml:"version"`
+	Project    Project            `yaml:"project"`
+	Engine     string             `yaml:"engine"`
+	EnginePath string             `yaml:"engine_path"`
+	Target     string             `yaml:"target"`
+	Optimize   *bool              `yaml:"optimize_substats"`
+	Variants   []OptimizerVariant `yaml:"optimizer_variants"`
+	Output     OutputConfig       `yaml:"output"`
+	Resume     ResumeConfig       `yaml:"resume"`
+	Scenarios  Scenarios          `yaml:"scenarios"`
 }
 
 type Project struct {
@@ -55,12 +56,14 @@ type Scenarios struct {
 	Growth         GrowthScenario        `yaml:"growth"`
 	Constellations ConstellationScenario `yaml:"constellations"`
 	Talents        TalentScenario        `yaml:"talents"`
+	Levels         LevelScenario         `yaml:"levels"`
 }
 
 type ScenarioBase struct {
-	Enabled  bool   `yaml:"enabled"`
-	Target   string `yaml:"target"`
-	Optimize *bool  `yaml:"optimize_substats"`
+	Enabled  bool               `yaml:"enabled"`
+	Target   string             `yaml:"target"`
+	Optimize *bool              `yaml:"optimize_substats"`
+	Variants []OptimizerVariant `yaml:"optimizer_variants"`
 }
 
 type WeaponSelection struct {
@@ -102,17 +105,15 @@ type OptimizerVariant struct {
 
 type WeaponScenario struct {
 	ScenarioBase  `yaml:",inline"`
-	MinimumRarity int                `yaml:"minimum_rarity"`
-	Items         WeaponSelection    `yaml:"items"`
-	Available     string             `yaml:"available_weapon"`
-	Variants      []OptimizerVariant `yaml:"optimizer_variants"`
-	MainStats     MainStats          `yaml:"main_stats"`
+	MinimumRarity int             `yaml:"minimum_rarity"`
+	Items         WeaponSelection `yaml:"items"`
+	Available     string          `yaml:"available_weapon"`
+	MainStats     MainStats       `yaml:"main_stats"`
 }
 
 type GrowthScenario struct {
 	ScenarioBase `yaml:",inline"`
-	Levels       []OptimizerVariant `yaml:"investment_levels"`
-	MainStats    MainStats          `yaml:"main_stats"`
+	MainStats    MainStats `yaml:"main_stats"`
 }
 
 type ConstellationScenario struct {
@@ -126,6 +127,11 @@ type TalentScenario struct {
 	ScenarioBase `yaml:",inline"`
 	Scope        string `yaml:"scope"`
 	Matrix       string `yaml:"matrix"`
+}
+
+type LevelScenario struct {
+	ScenarioBase `yaml:",inline"`
+	Scope        string `yaml:"scope"`
 }
 
 func (c *ProjectConfig) Validate() error {

@@ -23,7 +23,7 @@ type Context struct {
 func Build(ctx Context) ([]domain.Plan, error) {
 	var plans []domain.Plan
 	builders := []func(Context) (domain.Plan, bool, error){
-		buildWeapons, buildGrowth, buildConstellations, buildTalents,
+		buildWeapons, buildGrowth, buildConstellations, buildTalents, buildLevels,
 	}
 	for _, build := range builders {
 		plan, enabled, err := build(ctx)
@@ -147,12 +147,12 @@ func buildWeapons(ctx Context) (domain.Plan, bool, error) {
 	if err != nil {
 		return domain.Plan{}, true, fmt.Errorf("weapons: %w", err)
 	}
-	variants, err := normalizeVariants(cfg.Variants)
+	variants, err := optimizerVariants(ctx.Project.Variants, cfg.Variants, optimize)
 	if err != nil {
 		return domain.Plan{}, true, fmt.Errorf("weapons: %w", err)
 	}
 	if len(variants) == 0 {
-		variants = []domain.OptimizerVariant{{Name: "default"}}
+		variants = []domain.OptimizerVariant{{Name: "kqms"}}
 	}
 	plan := domain.Plan{Scenario: "weapons"}
 	for _, weaponKey := range selected {
@@ -200,12 +200,12 @@ func buildGrowth(ctx Context) (domain.Plan, bool, error) {
 	if err != nil {
 		return domain.Plan{}, true, fmt.Errorf("growth: %w", err)
 	}
-	levels, err := normalizeVariants(cfg.Levels)
+	levels, err := optimizerVariants(ctx.Project.Variants, cfg.Variants, optimize)
 	if err != nil {
 		return domain.Plan{}, true, fmt.Errorf("growth: %w", err)
 	}
 	if len(levels) == 0 {
-		levels = []domain.OptimizerVariant{{Name: "default"}}
+		levels = []domain.OptimizerVariant{{Name: "kqms"}}
 	}
 	stats, err := mainStatCombos(cfg.MainStats)
 	if err != nil {
@@ -268,19 +268,27 @@ func buildConstellations(ctx Context) (domain.Plan, bool, error) {
 		return domain.Plan{}, true, fmt.Errorf("constellations: different target characters are not supported")
 	}
 	plan := domain.Plan{Scenario: "constellations"}
+	variants, err := optimizerVariants(ctx.Project.Variants, cfg.Variants, optimize)
+	if err != nil {
+		return domain.Plan{}, true, fmt.Errorf("constellations: %w", err)
+	}
 	for _, level := range entry.levels {
 		if cfg.MaxAdditional != nil && level-baseline > *cfg.MaxAdditional {
 			continue
 		}
-		spec := domain.RunSpec{
-			Scenario: "constellations", Character: char, Scope: scope, Target: target, Optimize: optimize,
-			Label: fmt.Sprintf("C%d", level), Baseline: level == baseline,
-			Mutations: []domain.Mutation{{
-				Type: domain.MutationConstellation, Character: char, Values: []string{strconv.Itoa(level)},
-			}},
+		for _, variant := range variants {
+			spec := domain.RunSpec{
+				Scenario: "constellations", Character: char, Scope: scope, Target: target, Optimize: optimize,
+				OptimizerOptions: variant.Options, TalentLevel: variant.TalentLevel,
+				Label: fmt.Sprintf("C%d [%s]", level, variant.Name), Baseline: level == baseline,
+				BaselineGroup: variant.Name,
+				Mutations: []domain.Mutation{{
+					Type: domain.MutationConstellation, Character: char, Values: []string{strconv.Itoa(level)},
+				}},
+			}
+			spec.Key = stableKey(spec)
+			plan.Specs = append(plan.Specs, spec)
 		}
-		spec.Key = stableKey(spec)
-		plan.Specs = append(plan.Specs, spec)
 	}
 	return plan, true, nil
 }
@@ -311,19 +319,82 @@ func buildTalents(ctx Context) (domain.Plan, bool, error) {
 		{"burst", [3]int{6, 6, 7}}, {"burst", [3]int{6, 6, 8}}, {"burst", [3]int{6, 6, 9}}, {"burst", [3]int{6, 6, 10}},
 	}
 	plan := domain.Plan{Scenario: "talents"}
+	variants, err := optimizerVariants(ctx.Project.Variants, cfg.Variants, optimize)
+	if err != nil {
+		return domain.Plan{}, true, fmt.Errorf("talents: %w", err)
+	}
 	for _, item := range levels {
-		spec := domain.RunSpec{
-			Scenario: "talents", Character: ctx.Project.Project.TargetCharacter, Section: item.section, Scope: domain.ScopeCharacter,
-			Target: target, Optimize: optimize,
-			Label:    fmt.Sprintf("%d-%d-%d", item.values[0], item.values[1], item.values[2]),
-			Baseline: item.values == [3]int{6, 6, 6},
-			Mutations: []domain.Mutation{{
-				Type: domain.MutationTalent, Character: ctx.Project.Project.TargetCharacter,
-				Values: []string{strconv.Itoa(item.values[0]), strconv.Itoa(item.values[1]), strconv.Itoa(item.values[2])},
-			}},
+		for _, variant := range variants {
+			spec := domain.RunSpec{
+				Scenario: "talents", Character: ctx.Project.Project.TargetCharacter, Section: item.section, Scope: domain.ScopeCharacter,
+				Target: target, Optimize: optimize, OptimizerOptions: variant.Options,
+				Label:    fmt.Sprintf("%d-%d-%d [%s]", item.values[0], item.values[1], item.values[2], variant.Name),
+				Baseline: item.values == [3]int{6, 6, 6}, BaselineGroup: variant.Name,
+				Mutations: []domain.Mutation{{
+					Type: domain.MutationTalent, Character: ctx.Project.Project.TargetCharacter,
+					Values: []string{strconv.Itoa(item.values[0]), strconv.Itoa(item.values[1]), strconv.Itoa(item.values[2])},
+				}},
+			}
+			spec.Key = stableKey(spec)
+			plan.Specs = append(plan.Specs, spec)
 		}
-		spec.Key = stableKey(spec)
-		plan.Specs = append(plan.Specs, spec)
+	}
+	return plan, true, nil
+}
+
+func buildLevels(ctx Context) (domain.Plan, bool, error) {
+	cfg := ctx.Project.Scenarios.Levels
+	if !cfg.Enabled {
+		return domain.Plan{}, false, nil
+	}
+	target, optimize, err := scenarioOptions(ctx.Project, cfg.Target, cfg.Optimize)
+	if err != nil {
+		return domain.Plan{}, true, fmt.Errorf("levels: %w", err)
+	}
+	if cfg.Scope != "" && cfg.Scope != string(domain.ScopeCharacter) {
+		return domain.Plan{}, true, fmt.Errorf("levels: only character scope is currently supported")
+	}
+	levels := []struct {
+		label  string
+		level  string
+		talent int
+	}{
+		{label: "80/80 (talents 8)", level: "80/80", talent: 8},
+		{label: "80/90", level: "80/90"},
+		{label: "90", level: "90/90"},
+		{label: "95", level: "95/95"},
+		{label: "100", level: "100/100"},
+	}
+	plan := domain.Plan{Scenario: "levels"}
+	char := ctx.Project.Project.TargetCharacter
+	variants, err := optimizerVariants(ctx.Project.Variants, cfg.Variants, optimize)
+	if err != nil {
+		return domain.Plan{}, true, fmt.Errorf("levels: %w", err)
+	}
+	for _, item := range levels {
+		mutations := []domain.Mutation{{
+			Type: domain.MutationLevel, Character: char, Values: []string{item.level},
+		}}
+		if item.talent > 0 {
+			mutations = append(mutations, domain.Mutation{
+				Type: domain.MutationTalent, Character: char,
+				Values: []string{
+					strconv.Itoa(item.talent),
+					strconv.Itoa(item.talent),
+					strconv.Itoa(item.talent),
+				},
+			})
+		}
+		for _, variant := range variants {
+			spec := domain.RunSpec{
+				Scenario: "levels", Character: char, Scope: domain.ScopeCharacter,
+				Target: target, Optimize: optimize, OptimizerOptions: variant.Options,
+				Label:    item.label + " [" + variant.Name + "]",
+				Baseline: item.level == "90/90", BaselineGroup: variant.Name, Mutations: mutations,
+			}
+			spec.Key = stableKey(spec)
+			plan.Specs = append(plan.Specs, spec)
+		}
 	}
 	return plan, true, nil
 }

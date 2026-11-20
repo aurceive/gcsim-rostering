@@ -29,16 +29,18 @@ func TestWeaponPlannerKeepsExplicitWeaponsBelowMinimumRarity(t *testing.T) {
 		Project:  domain.Project{Name: "test", TargetCharacter: "fischl"},
 		Optimize: &enabled,
 		Scenarios: domain.Scenarios{Weapons: domain.WeaponScenario{
-			ScenarioBase:  domain.ScenarioBase{Enabled: true},
+			ScenarioBase: domain.ScenarioBase{
+				Enabled: true,
+				Variants: []domain.OptimizerVariant{{
+					Name: "demo",
+					Options: map[string]any{
+						"talent_level":          9,
+						"total_liquid_substats": 20,
+					},
+				}},
+			},
 			MinimumRarity: 5,
 			Items:         domain.WeaponSelection{Items: []string{"favoniuswarbow 2"}},
-			Variants: []domain.OptimizerVariant{{
-				Name: "demo",
-				Options: map[string]any{
-					"talent_level":          9,
-					"total_liquid_substats": 20,
-				},
-			}},
 		}},
 	}
 	plans, err := Build(Context{Config: plannerConfig, Project: project, Metadata: metadata})
@@ -69,11 +71,93 @@ func TestTalentPlannerUsesCurrentDefaultMatrix(t *testing.T) {
 			Matrix:       "default",
 		}},
 	}
+
 	plans, err := Build(Context{Config: plannerConfig, Project: project})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(plans) != 1 || len(plans[0].Specs) != 17 {
 		t.Fatalf("expected 17 talent combinations, got %#v", plans)
+	}
+}
+
+func TestLevelPlannerHasFiveRowsAndLevel90Baseline(t *testing.T) {
+	project := domain.ProjectConfig{
+		Version: domain.FormatVersion,
+		Project: domain.Project{Name: "test", TargetCharacter: "fischl"},
+		Scenarios: domain.Scenarios{Levels: domain.LevelScenario{
+			ScenarioBase: domain.ScenarioBase{Enabled: true},
+		}},
+	}
+
+	plans, err := Build(Context{Config: plannerConfig, Project: project})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plans) != 1 || len(plans[0].Specs) != 5 {
+		t.Fatalf("expected five level rows, got %#v", plans)
+	}
+	specs := plans[0].Specs
+	wants := []string{"80/80", "80/90", "90/90", "95/95", "100/100"}
+	for i, spec := range specs {
+		if spec.Mutations[0].Values[0] != wants[i] {
+			t.Fatalf("row %d: got %q, want %q", i, spec.Mutations[0].Values[0], wants[i])
+		}
+	}
+
+	if len(specs[0].Mutations) != 2 || specs[0].Mutations[1].Type != domain.MutationTalent {
+		t.Fatal("80/80 row must set talents to 8")
+	}
+	if !specs[2].Baseline || specs[2].Label != "90 [kqms]" {
+		t.Fatal("90 must be the 100% baseline")
+	}
+}
+
+func TestGlobalOptimizerVariantsCanBeOverriddenPerScenario(t *testing.T) {
+	metadata := engine.Metadata{
+		Weapons: map[string]engine.Weapon{
+			"favoniuswarbow": {Key: "favoniuswarbow", Rarity: 4, WeaponClass: "BOW"},
+		},
+		Characters: map[string]engine.Character{
+			"fischl": {Key: "fischl", WeaponClass: "BOW"},
+		},
+		WeaponNames: map[string]string{"favoniuswarbow": "favoniuswarbow"},
+	}
+	project := domain.ProjectConfig{
+		Version: domain.FormatVersion,
+		Project: domain.Project{Name: "test", TargetCharacter: "fischl"},
+		Variants: []domain.OptimizerVariant{{
+			Name: "global", Options: map[string]any{"total_liquid_substats": 20},
+		}},
+		Scenarios: domain.Scenarios{
+			Weapons: domain.WeaponScenario{
+				ScenarioBase: domain.ScenarioBase{Enabled: true},
+				Items:        domain.WeaponSelection{Items: []string{"favoniuswarbow 5"}},
+			},
+			Growth: domain.GrowthScenario{
+				ScenarioBase: domain.ScenarioBase{
+					Enabled: true,
+					Variants: []domain.OptimizerVariant{{
+						Name: "growth", Options: map[string]any{"total_liquid_substats": 30},
+					}},
+				},
+			},
+		},
+	}
+	plans, err := Build(Context{Config: plannerConfig, Project: project, Metadata: metadata})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plans) != 2 {
+		t.Fatalf("expected two plans, got %d", len(plans))
+	}
+	if plans[0].Specs[0].SortGroup != "favoniuswarbow/r5/global" {
+		t.Fatalf("weapons did not use global optimizer variant: %#v", plans[0].Specs[0])
+	}
+	if plans[1].Specs[0].SortGroup != "growth" {
+		t.Fatalf("growth did not override global optimizer variant: %#v", plans[1].Specs[0])
+	}
+	if plans[1].Specs[0].OptimizerOptions["total_liquid_substats"] != 30 {
+		t.Fatalf("growth options not overridden: %#v", plans[1].Specs[0].OptimizerOptions)
 	}
 }

@@ -74,7 +74,8 @@ func summarySheet(plans []domain.Plan, results map[string]domain.RunResult) ods.
 
 func scenarioSheets(plans []domain.Plan, results map[string]domain.RunResult, specs map[string]domain.RunSpec) []ods.Sheet {
 	names := map[string]string{
-		"weapons": "Weapons", "growth": "Growth", "constellations": "Constellations", "talents": "Talents",
+		"weapons": "Weapons", "growth": "Growth", "constellations": "Constellations",
+		"talents": "Talents", "levels": "Levels",
 	}
 	var sheets []ods.Sheet
 	for _, plan := range plans {

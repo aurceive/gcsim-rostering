@@ -19,6 +19,7 @@ func normalizeVariants(values []domain.OptimizerVariant) ([]domain.OptimizerVari
 		if value.Name == "" && len(values) > 1 {
 			return nil, fmt.Errorf("optimizer variant name is required")
 		}
+
 		if value.Name != "" && seen[value.Name] {
 			return nil, fmt.Errorf("duplicate optimizer variant %q", value.Name)
 		}
@@ -42,6 +43,31 @@ func normalizeVariants(values []domain.OptimizerVariant) ([]domain.OptimizerVari
 		result = append(result, value)
 	}
 	return result, nil
+}
+
+func optimizerVariants(global, scenario []domain.OptimizerVariant, optimize bool) ([]domain.OptimizerVariant, error) {
+	if !optimize {
+		return []domain.OptimizerVariant{{Name: "kqms"}}, nil
+	}
+	if len(scenario) > 0 {
+		values, err := normalizeVariants(scenario)
+		if err != nil {
+			return nil, err
+		}
+		return withDefaultVariant(values), nil
+	}
+	values, err := normalizeVariants(global)
+	if err != nil {
+		return nil, err
+	}
+	return withDefaultVariant(values), nil
+}
+
+func withDefaultVariant(values []domain.OptimizerVariant) []domain.OptimizerVariant {
+	if len(values) == 0 {
+		return []domain.OptimizerVariant{{Name: "kqms"}}
+	}
+	return values
 }
 
 func parseInt(raw any) (int, error) {

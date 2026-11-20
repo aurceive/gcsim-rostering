@@ -23,6 +23,13 @@ func TestMutationsPreserveOtherLines(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	out, err = SetLevel(out, "fischl", "80/90")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out == sample {
+		t.Fatal("expected mutations")
+	}
 	if out == sample {
 		t.Fatal("expected mutations")
 	}

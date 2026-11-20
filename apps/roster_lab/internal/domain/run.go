@@ -9,6 +9,7 @@ const (
 	MutationMainStats     MutationType = "main_stats"
 	MutationConstellation MutationType = "constellation"
 	MutationTalent        MutationType = "talent"
+	MutationLevel         MutationType = "level"
 )
 
 type Mutation struct {

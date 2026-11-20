@@ -151,6 +151,11 @@ func applyMutations(config string, spec domain.RunSpec) (string, error) {
 				values[i] = value
 			}
 			config, err = configedit.SetTalents(config, mutation.Character, values[0], values[1], values[2])
+		case domain.MutationLevel:
+			if len(mutation.Values) != 1 {
+				return "", fmt.Errorf("level mutation requires one value")
+			}
+			config, err = configedit.SetLevel(config, mutation.Character, mutation.Values[0])
 		default:
 			return "", fmt.Errorf("unsupported mutation %q", mutation.Type)
 		}

@@ -53,6 +53,32 @@ target: team_dps
 optimize_substats: true
 # optimize_substats: false
 
+# Global optimizer standards. They are applied to every scenario whose effective
+# optimize_substats is true. Each variant multiplies that scenario's run set.
+# A scenario-level optimizer_variants replaces this list completely.
+# If both lists are omitted, one "kqms" variant without options is used.
+# If optimization is false, no optimizer options are applied and variants do
+# not multiply the scenario run set.
+# Names are required when multiple variants are configured.
+optimizer_variants:
+  - name: kqms
+    options:
+      # options.talent_level changes only target_character and is not forwarded
+      # to the engine -options string.
+      talent_level: 10
+      # Engine option keys may contain only letters, digits and underscores.
+      total_liquid_substats: 20
+      indiv_liquid_cap: 10
+      fixed_substats_count: 2
+
+  # Additional global standards can be listed:
+  # - name: high
+  #   options:
+  #     talent_level: 10
+  #     total_liquid_substats: 30
+  #     indiv_liquid_cap: 12
+  #     fixed_substats_count: 1
+
 output:
   # Default: output/roster_lab. Relative paths are resolved from repository root.
   directory: output/roster_lab
@@ -82,6 +108,7 @@ scenarios:
   # - enabled: false by default; disabled scenarios do not create an ODS sheet
   # - target: optional scenario override of the global target
   # - optimize_substats: optional scenario override of global optimization
+  # - optimizer_variants: optional complete replacement of the global variants
   #
   # Scenarios are independent. Their run sets are not cross-multiplied.
 
@@ -127,31 +154,14 @@ scenarios:
     # - {append: false, items: [...]}
     # - {append: true,  items: [...]}
 
-    # Default when omitted: one "default" variant with no optimizer options.
-    # Names are required when multiple variants are configured.
-    optimizer_variants:
-      - name: kqms
-
-        # options.talent_level is a roster_lab mutation for target_character.
-        # It is removed before sending other options to -options.
-        # Current implementation also accepts talent_level next to name for
-        # compatibility, but options.talent_level is the canonical form.
-        options:
-          talent_level: 10
-          # Remaining entries are arbitrary engine optimizer keys and values.
-          # Keys may contain only letters, digits and underscores.
-          # They are sorted and passed as key=value;key2=value2.
-          total_liquid_substats: 20
-          indiv_liquid_cap: 10
-          fixed_substats_count: 2
-
-      # Additional unique variants can be listed:
-      # - name: high
-      #   options:
-      #     talent_level: 10
-      #     total_liquid_substats: 30
-      #     indiv_liquid_cap: 12
-      #     fixed_substats_count: 1
+    # Optional complete replacement of global optimizer_variants:
+    # optimizer_variants:
+    #   - name: weapon-only
+    #     options:
+    #       talent_level: 9
+    #       total_liquid_substats: 20
+    #       indiv_liquid_cap: 10
+    #       fixed_substats_count: 2
 
     # If main_stats is omitted or all three lists are absent, the base stats
     # from sim_config.dart are used once.
@@ -177,15 +187,14 @@ scenarios:
     # optimize_substats: true
     # optimize_substats: false
 
-    # Same shape and talent_level rules as weapons.optimizer_variants.
-    # Default when omitted: one "default" investment level.
-    investment_levels:
-      - name: demo
-        options:
-          talent_level: 9
-          total_liquid_substats: 20
-          indiv_liquid_cap: 10
-          fixed_substats_count: 2
+    # Optional complete replacement of global optimizer_variants:
+    # optimizer_variants:
+    #   - name: growth-only
+    #     options:
+    #       talent_level: 9
+    #       total_liquid_substats: 20
+    #       indiv_liquid_cap: 10
+    #       fixed_substats_count: 2
 
     # Optional sands × goblet × circlet product for target_character.
     # Omit it to preserve the base stats from sim_config.dart.
@@ -234,6 +243,27 @@ scenarios:
     # Alternatives: max_additional: 0
     #               # omit max_additional entirely
 
+  # Compares fixed character levels. Exactly five rows are generated:
+  # - 80/80 with talents 8-8-8
+  # - 80/90
+  # - 90/90
+  # - 95/95
+  # - 100/100
+  #
+  # 90/90 is the 100% baseline.
+  levels:
+    enabled: false
+    # target: team_dps
+    # target: char_dps
+    # target: personal_dps
+    # optimize_substats: true
+    # optimize_substats: false
+
+    # Current implementation supports only character.
+    # team is reserved and currently rejected.
+    scope: character
+    # scope: team
+
   talents:
     enabled: false
     # target: team_dps
@@ -254,3 +284,7 @@ scenarios:
     # burst: 6-6-7, 6-6-8, 6-6-9, 6-6-10
     # If omitted, matrix also defaults to default.
     matrix: default
+
+  # For talent and level scenarios, optimizer option maps are applied normally,
+  # but their special talent_level is ignored because the scenario itself owns
+  # the talent mutations.

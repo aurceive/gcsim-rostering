@@ -11,6 +11,7 @@ var (
 	talentToken = regexp.MustCompile(`\btalent=\s*[0-9]+\s*,\s*[0-9]+\s*,\s*[0-9]+\b`)
 	consToken   = regexp.MustCompile(`\bcons=[0-9]+\b`)
 	refineToken = regexp.MustCompile(`\s+refine=[0-9]+`)
+	levelToken  = regexp.MustCompile(`\blvl=\d+/\d+\b`)
 )
 
 func CharacterOrder(config string) []string {
@@ -78,6 +79,20 @@ func SetTalents(config, char string, na, e, q int) (string, error) {
 
 func SetTalentLevel(config, char string, level int) (string, error) {
 	return SetTalents(config, char, level, level, level)
+}
+
+func SetLevel(config, char, level string) (string, error) {
+	parts := strings.Split(level, "/")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("character level must be in level/level form, got %q", level)
+	}
+	for _, part := range parts {
+		value, err := strconv.Atoi(part)
+		if err != nil || value < 1 || value > 100 {
+			return "", fmt.Errorf("invalid character level %q", level)
+		}
+	}
+	return replaceCharacterToken(config, char, levelToken, "lvl="+level, "lvl")
 }
 
 func SetConstellation(config, char string, level int) (string, error) {
