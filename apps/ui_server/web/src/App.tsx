@@ -258,19 +258,20 @@ export default function App() {
 				<label>
 					Engine{" "}
 					<select
+						className="bg-g-surface text-g-ink"
 						value={engine}
 						onChange={(event) => setEngine(event.target.value)}
 					>
 						{!recognized && (
-							<option value={engine}>{engine} (not configured)</option>
+							<option className="bg-g-surface text-g-ink" value={engine}>{engine} (not configured)</option>
 						)}
 						{engines.map((item) => (
-							<option value={item.name} key={item.name}>
+							<option className="bg-g-surface text-g-ink" value={item.name} key={item.name}>
 								{item.name}
 								{item.available ? "" : " (not built)"}
 							</option>
 						))}
-						<option value={browserEngine}>kqmsim (browser/WASM)</option>
+						<option className="bg-g-surface text-g-ink" value={browserEngine}>kqmsim (browser/WASM)</option>
 					</select>
 				</label>
 				<nav aria-label="KQM sites">
