@@ -327,7 +327,7 @@ func buildTalents(ctx Context) (domain.Plan, bool, error) {
 		for _, variant := range variants {
 			spec := domain.RunSpec{
 				Scenario: "talents", Character: ctx.Project.Project.TargetCharacter, Section: item.section, Scope: domain.ScopeCharacter,
-				Target: target, Optimize: optimize, OptimizerOptions: variant.Options,
+				Target: target, Optimize: optimize, OptimizerOptions: variant.Options, TalentLevel: variant.TalentLevel,
 				Label:    fmt.Sprintf("%d-%d-%d [%s]", item.values[0], item.values[1], item.values[2], variant.Name),
 				Baseline: item.values == [3]int{6, 6, 6}, BaselineGroup: variant.Name,
 				Mutations: []domain.Mutation{{
@@ -388,7 +388,7 @@ func buildLevels(ctx Context) (domain.Plan, bool, error) {
 		for _, variant := range variants {
 			spec := domain.RunSpec{
 				Scenario: "levels", Character: char, Scope: domain.ScopeCharacter,
-				Target: target, Optimize: optimize, OptimizerOptions: variant.Options,
+				Target: target, Optimize: optimize, OptimizerOptions: variant.Options, TalentLevel: variant.TalentLevel,
 				Label:    item.label + " [" + variant.Name + "]",
 				Baseline: item.level == "90/90", BaselineGroup: variant.Name, Mutations: mutations,
 			}

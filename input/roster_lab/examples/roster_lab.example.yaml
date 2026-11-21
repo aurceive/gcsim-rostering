@@ -37,7 +37,7 @@ optimize_substats: true # Default; enables the engine's -substatOptimFull.
 optimizer_variants:
   - name: kqms
     options:
-      talent_level: 10 # Target character only; not passed as an engine option.
+      talent_level: 10 # Whole team; not passed as an engine option.
       total_liquid_substats: 20
       indiv_liquid_cap: 10
       fixed_substats_count: 2
@@ -163,4 +163,5 @@ scenarios:
     # auto: 7-6-6 through 10-6-6; skill: 6-7-6 through 6-10-6;
     # burst: 6-6-7 through 6-6-10.
 
-  # Levels and talents ignore optimizer talent_level: they own talent mutations.
+  # Team talent_level is applied first; the scenario's target-character talent
+  # mutation is applied afterwards and overrides it for that character.

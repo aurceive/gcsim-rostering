@@ -81,6 +81,30 @@ func SetTalentLevel(config, char string, level int) (string, error) {
 	return SetTalents(config, char, level, level, level)
 }
 
+func SetTalentLevelAllChars(config string, level int) (string, error) {
+	if !validTalent(level) {
+		return "", fmt.Errorf("talent level must be in [1..10], got %d", level)
+	}
+	lines := strings.Split(config, "\n")
+	replacement := fmt.Sprintf("talent=%d,%d,%d", level, level, level)
+	found := false
+	for i, line := range lines {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) < 2 || fields[1] != "char" {
+			continue
+		}
+		if !talentToken.MatchString(line) {
+			return "", fmt.Errorf("character %q: missing talent token", fields[0])
+		}
+		lines[i] = talentToken.ReplaceAllString(line, replacement)
+		found = true
+	}
+	if !found {
+		return "", fmt.Errorf("no character lines found")
+	}
+	return strings.Join(lines, "\n"), nil
+}
+
 func SetLevel(config, char, level string) (string, error) {
 	parts := strings.Split(level, "/")
 	if len(parts) != 2 {

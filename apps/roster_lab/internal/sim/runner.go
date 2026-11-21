@@ -113,6 +113,12 @@ func (r Runner) Run(ctx context.Context, baseConfig string, spec domain.RunSpec,
 
 func applyMutations(config string, spec domain.RunSpec) (string, error) {
 	var err error
+	if spec.TalentLevel != nil {
+		config, err = configedit.SetTalentLevelAllChars(config, *spec.TalentLevel)
+		if err != nil {
+			return "", err
+		}
+	}
 	for _, mutation := range spec.Mutations {
 		switch mutation.Type {
 		case domain.MutationWeapon:
@@ -164,9 +170,6 @@ func applyMutations(config string, spec domain.RunSpec) (string, error) {
 		if err != nil {
 			return "", err
 		}
-	}
-	if spec.TalentLevel != nil {
-		config, err = configedit.SetTalentLevel(config, spec.Character, *spec.TalentLevel)
 	}
 	return config, err
 }

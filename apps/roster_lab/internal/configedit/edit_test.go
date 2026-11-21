@@ -50,7 +50,20 @@ func TestSetSetsReplacesAllTargetArtifactLines(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if strings.Count(output, `fischl add set=`) != 1 || !strings.Contains(output, `set="goldentroupe" count=4`) {
 		t.Fatalf("sets were not replaced: %s", output)
+	}
+}
+
+func TestSetTalentLevelAllChars(t *testing.T) {
+	input := `fischl char lvl=90/90 cons=2 talent=6,6,6;
+bennett char lvl=90/90 cons=6 talent=9,9,9;`
+	output, err := SetTalentLevelAllChars(input, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(output, "talent=8,8,8") != 2 {
+		t.Fatalf("talent level was not applied to the whole team:\n%s", output)
 	}
 }

@@ -30,6 +30,7 @@ func TestExampleIsConfigurationContract(t *testing.T) {
 		"enabled:", "minimum_rarity:", "items:", "append:",
 		"available_weapon:", "optimizer_variants:", "talent_level:",
 		"Global optimizer standards", "every scenario", "\"kqms\"", "main_stats:", "sands:", "goblet:", "circlet:",
+		"Whole team; not passed as an engine option",
 		"scope: character", "scope: team", "characters:", "max_additional:",
 		"sets:", "goldentroupe", "Изумрудная тень 2 4",
 		"levels:", "80/80", "80/90", "90/90", "95/95", "100/100",
