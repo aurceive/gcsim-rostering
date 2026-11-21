@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/aurceive/gcsim-rostering/apps/ui_server/internal/engine"
+	"github.com/aurceive/gcsim-rostering/apps/ui_server/internal/standards"
 	"github.com/aurceive/gcsim-rostering/apps/ui_server/internal/web"
 )
 
@@ -69,7 +70,11 @@ func run() error {
 			logger.Printf("close engines: %v", err)
 		}
 	}()
-	handler, err := web.New(manager, filepath.Join(root, "apps", "ui_server", "web", "dist"), logger)
+	variants := standards.Load(filepath.Join(root, "input", "ui_server", "ui_server.yaml"))
+	if _, err := variants.Names(); err != nil {
+		logger.Printf("balancer settings: %v", err)
+	}
+	handler, err := web.New(manager, filepath.Join(root, "apps", "ui_server", "web", "dist"), logger, variants)
 	if err != nil {
 		return err
 	}

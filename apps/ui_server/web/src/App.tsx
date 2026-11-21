@@ -2,7 +2,9 @@ import { ServerExecutor, WasmExecutor } from "@gcsim/executors";
 import { Toaster } from "@gcsim/primitives";
 import { useLocalStorage } from "@gcsim/utils";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { UI } from "./UI";
+import type { BalancerStandards } from "./Balancer";
 
 type EngineStatus = {
 	name: string;
@@ -24,6 +26,7 @@ function EngineWorkspace({
 	config,
 	setConfig,
 	applyBalancedConfig,
+	balancerStandards,
 	status,
 }: {
 	name: string;
@@ -31,6 +34,7 @@ function EngineWorkspace({
 	config: string;
 	setConfig: (value: string) => void;
 	applyBalancedConfig: (original: string, value: string) => boolean;
+	balancerStandards: BalancerStandards;
 	status?: EngineStatus;
 }) {
 	const [started, setStarted] = React.useState(false);
@@ -88,6 +92,7 @@ function EngineWorkspace({
 					config={config}
 					setConfig={setConfig}
 					applyBalancedConfig={applyBalancedConfig}
+					balancerStandards={balancerStandards}
 					engine={name}
 					visible={visible}
 				/>
@@ -101,11 +106,13 @@ function BrowserWorkspace({
 	config,
 	setConfig,
 	applyBalancedConfig,
+	balancerStandards,
 }: {
 	visible: boolean;
 	config: string;
 	setConfig: (value: string) => void;
 	applyBalancedConfig: (original: string, value: string) => boolean;
+	balancerStandards: BalancerStandards;
 }) {
 	const [workers, setWorkers] = useLocalStorage("wasm-num-workers", 3);
 	const executor = React.useMemo(() => new WasmExecutor("/main.wasm"), []);
@@ -120,6 +127,7 @@ function BrowserWorkspace({
 				config={config}
 				setConfig={setConfig}
 				applyBalancedConfig={applyBalancedConfig}
+				balancerStandards={balancerStandards}
 				engine="kqmsim"
 				visible={visible}
 			>
@@ -143,6 +151,8 @@ function BrowserWorkspace({
 }
 
 export default function App() {
+	const { i18n } = useTranslation();
+	const russian = i18n.resolvedLanguage === "ru";
 	const [engine, setEngine] = useLocalStorage(selectionKey, "gcsim");
 	const [config, setConfig] = useLocalStorage("cfg", "");
 	const configRef = React.useRef(config);
@@ -159,6 +169,42 @@ export default function App() {
 	const [visited, setVisited] = React.useState<string[]>([]);
 	const [engines, setEngines] = React.useState<EngineStatus[]>([]);
 	const [loadError, setLoadError] = React.useState("");
+	const [standard, setStandard] = useLocalStorage("ui-server-balancer-standard", "");
+	const [standards, setStandards] = React.useState<string[]>([]);
+	const [standardsError, setStandardsError] = React.useState("");
+	const [standardsLoading, setStandardsLoading] = React.useState(true);
+
+	React.useEffect(() => {
+		const controller = new AbortController();
+		fetch("/api/optimizer-variants", { signal: controller.signal })
+			.then(async (response) => {
+				if (!response.ok) throw new Error(await responseError(response));
+				const value: unknown = await response.json();
+				if (!Array.isArray(value) || value.length === 0 || !value.every((item) => typeof item === "string" && item.length > 0))
+					throw new Error("Invalid balancer standards response.");
+				return value as string[];
+			})
+			.then((names) => {
+				setStandards(names);
+				if (!standard) setStandard(names[0]);
+			})
+			.catch((reason: unknown) => {
+				if (!controller.signal.aborted)
+					setStandardsError(reason instanceof Error ? reason.message : String(reason));
+			})
+			.finally(() => {
+				if (!controller.signal.aborted) setStandardsLoading(false);
+			});
+		return () => controller.abort();
+	}, []);
+
+	const balancerStandards: BalancerStandards = {
+		names: standards,
+		selected: standard,
+		setSelected: setStandard,
+		error: standardsError,
+		loading: standardsLoading,
+	};
 
 	React.useEffect(() => {
 		let active = true;
@@ -236,6 +282,15 @@ export default function App() {
 					Cannot load engines: {loadError}
 				</p>
 			)}
+			{(standardsError || (!standardsLoading && standard && !standards.includes(standard))) && (
+				<p className="kqm-error" role="alert">
+					{standardsError
+						? `${russian ? "Настройки балансера" : "Balancer standards"}: ${standardsError}`
+						: russian
+							? `Стандарт балансировки "${standard}" больше не настроен. Выберите другой стандарт.`
+							: `Balancer standard "${standard}" is no longer configured. Select another standard.`}
+				</p>
+			)}
 			{engines.length > 0 && !recognized && (
 				<p className="kqm-error" role="alert">
 					Saved engine "{engine}" is not configured. Select another engine.
@@ -249,6 +304,7 @@ export default function App() {
 						config={config}
 						setConfig={updateConfig}
 						applyBalancedConfig={applyBalancedConfig}
+						balancerStandards={balancerStandards}
 					/>
 				) : (
 					<EngineWorkspace
@@ -258,6 +314,7 @@ export default function App() {
 						config={config}
 						setConfig={updateConfig}
 						applyBalancedConfig={applyBalancedConfig}
+						balancerStandards={balancerStandards}
 						status={engines.find((item) => item.name === name)}
 					/>
 				),

@@ -12,7 +12,7 @@ import (
 )
 
 // Balance runs the same optimizer used by grow_roster without its final simulation.
-func (m *Manager) Balance(ctx context.Context, name, config string, output io.Writer) (string, error) {
+func (m *Manager) Balance(ctx context.Context, name, config, options string, output io.Writer) (string, error) {
 	p, ok := m.processes[name]
 	if !ok {
 		return "", fmt.Errorf("unknown engine %q", name)
@@ -44,7 +44,11 @@ func (m *Manager) Balance(ctx context.Context, name, config string, output io.Wr
 		return "", fmt.Errorf("write balancer config: %w", err)
 	}
 
-	cmd := exec.Command(executable, "-c", input, "-substatOptim", "-out", result)
+	args := []string{"-c", input, "-substatOptim", "-out", result}
+	if options != "" {
+		args = append(args, "-options", options)
+	}
+	cmd := exec.Command(executable, args...)
 	cmd.Dir = filepath.Join(m.root, "engines", name)
 	cmd.Stdout = output
 	cmd.Stderr = output

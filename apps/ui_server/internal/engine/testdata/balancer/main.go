@@ -11,6 +11,7 @@ func main() {
 	input := flag.String("c", "", "")
 	output := flag.String("out", "", "")
 	optimize := flag.Bool("substatOptim", false, "")
+	options := flag.String("options", "", "")
 	flag.Parse()
 	data, err := os.ReadFile(*input)
 	if err != nil || !*optimize {
@@ -18,6 +19,7 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Fprintln(os.Stderr, "optimizer started")
+	fmt.Fprintf(os.Stdout, "options: %s\n", *options)
 	switch string(data) {
 	case "fail":
 		fmt.Fprintln(os.Stderr, "invalid config")

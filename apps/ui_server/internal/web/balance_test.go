@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/aurceive/gcsim-rostering/apps/ui_server/internal/engine"
+	"github.com/aurceive/gcsim-rostering/apps/ui_server/internal/standards"
 )
 
 func balanceTestServer(t *testing.T) (*httptest.Server, *engine.Manager) {
@@ -46,7 +47,11 @@ func balanceTestServer(t *testing.T) (*httptest.Server, *engine.Manager) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := New(manager, static, logger)
+	settings := filepath.Join(root, "ui_server.yaml")
+	if err := os.WriteFile(settings, []byte("optimizer_variants:\n  - name: kqms\n  - name: custom\n    options:\n      talent_level: 9\n      total_liquid_substats: 30\n      indiv_liquid_cap: 12\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	handler, err := New(manager, static, logger, standards.Load(settings))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +74,7 @@ func TestBalancerStream(t *testing.T) {
 		{"failure", "fail", "error", "failed"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, err := http.Post(server.URL+"/api/engines/gcsim/balance", "application/json", strings.NewReader(`{"config":"`+tt.config+`"}`))
+			resp, err := http.Post(server.URL+"/api/engines/gcsim/balance", "application/json", strings.NewReader(`{"config":"`+tt.config+`","variant":"kqms"}`))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -99,7 +104,7 @@ func TestBalancerStream(t *testing.T) {
 			}
 		})
 	}
-	resp, err := http.Post(server.URL+"/api/engines/unknown/balance", "application/json", strings.NewReader(`{"config":"original"}`))
+	resp, err := http.Post(server.URL+"/api/engines/unknown/balance", "application/json", strings.NewReader(`{"config":"original","variant":"kqms"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,10 +136,11 @@ func TestBalancerCancellationAndValidation(t *testing.T) {
 		t.Fatalf("empty config returned %s", resp.Status)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/api/engines/gcsim/balance", strings.NewReader(`{"config":"wait"}`))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/api/engines/gcsim/balance", strings.NewReader(`{"config":"wait","variant":"kqms"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)

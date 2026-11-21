@@ -27,7 +27,7 @@ func TestRealEngines(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = manager.Close() }()
-	handler, err := New(manager, filepath.Join(root, "apps", "ui_server", "web", "dist"), logger)
+	handler, err := New(manager, filepath.Join(root, "apps", "ui_server", "web", "dist"), logger, testStandards(t))
 	if err != nil {
 		t.Fatal(err)
 	}

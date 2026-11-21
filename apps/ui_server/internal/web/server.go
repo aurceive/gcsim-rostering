@@ -17,16 +17,18 @@ import (
 	"time"
 
 	"github.com/aurceive/gcsim-rostering/apps/ui_server/internal/engine"
+	"github.com/aurceive/gcsim-rostering/apps/ui_server/internal/standards"
 )
 
 type Server struct {
-	engines *engine.Manager
-	static  string
-	assets  *httputil.ReverseProxy
-	log     *log.Logger
+	engines   *engine.Manager
+	static    string
+	assets    *httputil.ReverseProxy
+	log       *log.Logger
+	standards *standards.Standards
 }
 
-func New(engines *engine.Manager, static string, logger *log.Logger) (*Server, error) {
+func New(engines *engine.Manager, static string, logger *log.Logger, variants *standards.Standards) (*Server, error) {
 	if info, err := os.Stat(filepath.Join(static, "index.html")); err != nil || info.IsDir() {
 		return nil, fmt.Errorf("UI build not found in %s; run scripts\\ui_server\\bootstrap.ps1", static)
 	}
@@ -47,7 +49,7 @@ func New(engines *engine.Manager, static string, logger *log.Logger) (*Server, e
 		logger.Printf("KQM service: %v", err)
 		http.Error(w, "KQM service unavailable", http.StatusBadGateway)
 	}
-	return &Server{engines: engines, static: static, assets: proxy, log: logger}, nil
+	return &Server{engines: engines, static: static, assets: proxy, log: logger, standards: variants}, nil
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -68,6 +70,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	switch {
+	case r.URL.Path == "/api/optimizer-variants" && r.Method == http.MethodGet:
+		names, err := s.standards.Names()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(names); err != nil {
+			s.log.Printf("encode balancer standards: %v", err)
+		}
 	case r.URL.Path == "/api/engines" && r.Method == http.MethodGet:
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(s.engines.Statuses()); err != nil {

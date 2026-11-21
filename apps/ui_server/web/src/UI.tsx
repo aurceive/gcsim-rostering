@@ -27,7 +27,7 @@ import { useLocalStorage } from "@gcsim/utils";
 import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { teamCharacters } from "./characters";
-import { useBalancer } from "./Balancer";
+import { type BalancerStandards, useBalancer } from "./Balancer";
 import { downloadSample } from "./downloadSample";
 
 export function UI({
@@ -38,6 +38,7 @@ export function UI({
 	visible = true,
 	engine,
 	applyBalancedConfig,
+	balancerStandards,
 }: {
 	exec: ExecutorSupplier<Executor>;
 	config?: string;
@@ -46,6 +47,7 @@ export function UI({
 	visible?: boolean;
 	engine?: string;
 	applyBalancedConfig?: (original: string, value: string) => boolean;
+	balancerStandards?: BalancerStandards;
 	gitCommit?: string;
 	mode?: string;
 }) {
@@ -59,6 +61,7 @@ export function UI({
 				visible={visible}
 				engine={engine}
 				applyBalancedConfig={applyBalancedConfig}
+				balancerStandards={balancerStandards}
 			/>
 		</ExecutorProvider>
 	);
@@ -71,6 +74,7 @@ function Workspace({
 	visible,
 	engine,
 	applyBalancedConfig,
+	balancerStandards,
 }: {
 	config: string;
 	setConfig: (value: string) => void;
@@ -78,6 +82,7 @@ function Workspace({
 	visible: boolean;
 	engine?: string;
 	applyBalancedConfig?: (original: string, value: string) => boolean;
+	balancerStandards?: BalancerStandards;
 }) {
 	const { t } = useTranslation();
 	const { exec, isReady, busy, run, cancel } = useExecutor();
@@ -109,7 +114,8 @@ function Workspace({
 		DefaultSampleOptions,
 	);
 	const data = loaded ?? result;
-	const balancer = useBalancer(engine ?? "", config, applyBalancedConfig ?? (() => false));
+	const balancer = useBalancer(engine ?? "", config, applyBalancedConfig ?? (() => false),
+		balancerStandards ?? { names: [], selected: "", setSelected: () => {}, error: "", loading: true });
 
 	function dismissConfigImport() {
 		setIncomingConfig(null);
@@ -226,7 +232,7 @@ function Workspace({
 					canRun={isReady && isValid && !busy && !balancer.running}
 					busy={!isReady || busy}
 					onRun={start}
-					extraAction={engine && applyBalancedConfig ? balancer.button : null}
+					extraAction={engine && applyBalancedConfig && balancerStandards ? balancer.button : null}
 					actionPanel={engine && applyBalancedConfig ? balancer.panel : null}
 					settings={
 						<Button variant="outline" onClick={() => setSettingsOpen(true)}>

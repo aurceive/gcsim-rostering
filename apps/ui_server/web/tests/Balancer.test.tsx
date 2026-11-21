@@ -1,4 +1,5 @@
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useBalancer } from "../../../kqmsim/src/Balancer";
 
@@ -9,6 +10,7 @@ vi.mock("react-i18next", async (importOriginal) => ({
 
 const encode = (event: unknown) =>
 	new TextEncoder().encode(`${JSON.stringify(event)}\n`);
+const standards = { names: ["kqms"], selected: "kqms", setSelected: vi.fn(), error: "", loading: false };
 
 function response() {
 	let stream!: ReadableStreamDefaultController<Uint8Array>;
@@ -30,8 +32,8 @@ describe("ui_server balancer", () => {
 	it("streams logs, then applies the result and hides the panel", async () => {
 		const stream = response();
 		const apply = vi.fn().mockReturnValue(true);
-		const { result } = renderHook(() => useBalancer("gcsim", "original", apply));
-		act(() => { result.current.button.props.onClick(); });
+		const { result } = renderHook(() => useBalancer("gcsim", "original", apply, standards));
+		act(() => { result.current.button.props.children[1].props.onClick(); });
 		await act(async () => {
 			stream.enqueue(encode({ type: "start" }));
 			stream.enqueue(encode({ type: "log", data: btoa("progress") }));
@@ -52,8 +54,8 @@ describe("ui_server balancer", () => {
 	it("keeps the panel on an engine error and never applies the config", async () => {
 		const stream = response();
 		const apply = vi.fn();
-		const { result } = renderHook(() => useBalancer("gcsim", "original", apply));
-		act(() => { result.current.button.props.onClick(); });
+		const { result } = renderHook(() => useBalancer("gcsim", "original", apply, standards));
+		act(() => { result.current.button.props.children[1].props.onClick(); });
 		await act(async () => {
 			stream.enqueue(encode({ type: "error", text: "bad config" }));
 			stream.close();
@@ -66,8 +68,8 @@ describe("ui_server balancer", () => {
 	it("keeps the current config when the original has changed", async () => {
 		const stream = response();
 		const apply = vi.fn().mockReturnValue(false);
-		const { result } = renderHook(() => useBalancer("gcsim", "original", apply));
-		act(() => { result.current.button.props.onClick(); });
+		const { result } = renderHook(() => useBalancer("gcsim", "original", apply, standards));
+		act(() => { result.current.button.props.children[1].props.onClick(); });
 		await act(async () => {
 			stream.enqueue(encode({ type: "result", text: "balanced" }));
 			stream.close();
@@ -79,8 +81,8 @@ describe("ui_server balancer", () => {
 	it("reports a truncated stream", async () => {
 		const stream = response();
 		const apply = vi.fn();
-		const { result } = renderHook(() => useBalancer("gcsim", "original", apply));
-		act(() => { result.current.button.props.onClick(); });
+		const { result } = renderHook(() => useBalancer("gcsim", "original", apply, standards));
+		act(() => { result.current.button.props.children[1].props.onClick(); });
 		await act(async () => { stream.close(); });
 		await waitFor(() => expect(result.current.panel?.props.role).toBe("alert"));
 		expect(apply).not.toHaveBeenCalled();
@@ -88,8 +90,8 @@ describe("ui_server balancer", () => {
 
 	it("preserves UTF-8 characters split across log chunks", async () => {
 		const stream = response();
-		const { result } = renderHook(() => useBalancer("gcsim", "original", () => true));
-		act(() => { result.current.button.props.onClick(); });
+		const { result } = renderHook(() => useBalancer("gcsim", "original", () => true, standards));
+		act(() => { result.current.button.props.children[1].props.onClick(); });
 		await act(async () => {
 			stream.enqueue(encode({ type: "log", data: btoa(String.fromCharCode(0xd0)) }));
 			stream.enqueue(encode({ type: "log", data: btoa(String.fromCharCode(0x9f)) }));
@@ -98,6 +100,30 @@ describe("ui_server balancer", () => {
 		await act(async () => {
 			stream.enqueue(encode({ type: "error", text: "failed" }));
 			stream.close();
+		});
+	});
+
+	it("sends the selected standard and disables unavailable standards", async () => {
+			const stream = response();
+			function Harness() {
+				const [selected, setSelected] = useState("missing");
+				const balancer = useBalancer("kqmsim", "original", () => true, {
+					names: ["kqms", "custom"], selected, setSelected, error: "", loading: false,
+				});
+				return <>{balancer.button}{balancer.panel}</>;
+			}
+			render(<Harness />);
+			const button = screen.getByRole("button", { name: "Balancer" }) as HTMLButtonElement;
+			expect(button.disabled).toBe(true);
+			fireEvent.change(screen.getByRole("combobox", { name: "Balancer standard" }), { target: { value: "custom" } });
+			expect(button.disabled).toBe(false);
+			fireEvent.click(button);
+			await waitFor(() => expect(fetch).toHaveBeenCalled());
+			const [, request] = vi.mocked(fetch).mock.calls[0];
+			expect(JSON.parse(String(request?.body))).toEqual({ config: "original", variant: "custom" });
+			await act(async () => {
+				stream.enqueue(encode({ type: "result", text: "balanced" }));
+				stream.close();
 		});
 	});
 });

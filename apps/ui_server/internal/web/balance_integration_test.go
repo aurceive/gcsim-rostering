@@ -37,7 +37,7 @@ sucrose burst, skill, attack;`
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
 			var output bytes.Buffer
-			result, err := manager.Balance(ctx, name, config, &output)
+			result, err := manager.Balance(ctx, name, config, "", &output)
 			if err != nil {
 				t.Fatalf("balance: %v\n%s", err, output.String())
 			}

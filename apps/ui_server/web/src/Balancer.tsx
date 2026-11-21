@@ -5,10 +5,19 @@ import { useTranslation } from "react-i18next";
 type Event = { type: string; text?: string; data?: string };
 const maxLog = 1024 * 1024;
 
+export type BalancerStandards = {
+	names: string[];
+	selected: string;
+	setSelected: (name: string) => void;
+	error: string;
+	loading: boolean;
+};
+
 export function useBalancer(
 	engine: string,
 	config: string,
 	apply: (original: string, value: string) => boolean,
+	standards: BalancerStandards,
 ) {
 	const { i18n } = useTranslation();
 	const russian = i18n.resolvedLanguage === "ru";
@@ -26,7 +35,7 @@ export function useBalancer(
 	}, [log]);
 
 	async function start() {
-		if (controller.current) return;
+		if (controller.current || standards.error || !standards.names.includes(standards.selected)) return;
 		const request = new AbortController();
 		controller.current = request;
 		const original = config;
@@ -38,7 +47,7 @@ export function useBalancer(
 			const response = await fetch(`/api/engines/${encodeURIComponent(engine)}/balance`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ config: original }),
+				body: JSON.stringify({ config: original, variant: standards.selected }),
 				signal: request.signal,
 			});
 			if (!response.ok) throw new Error(await response.text());
@@ -107,7 +116,22 @@ export function useBalancer(
 	return {
 		running,
 		button: (
-			<Button className="flex-1" onClick={start} disabled={running || !config.trim()}>
+			<>
+			<select
+				className="min-w-0 flex-1"
+				aria-label={russian ? "Стандарт балансировки" : "Balancer standard"}
+				value={standards.selected}
+				disabled={running || standards.loading || !!standards.error}
+				onChange={(event) => standards.setSelected(event.target.value)}
+			>
+				{!standards.names.includes(standards.selected) && (
+					<option value={standards.selected}>
+						{standards.selected || (russian ? "Загрузка стандартов..." : "Loading standards...")}
+					</option>
+				)}
+				{standards.names.map((name) => <option key={name} value={name}>{name}</option>)}
+			</select>
+			<Button className="flex-1" onClick={start} disabled={running || !config.trim() || standards.loading || !!standards.error || !standards.names.includes(standards.selected)}>
 				{running ? <Spinner /> : (
 					<svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
 						<path d="M12 3v18M3 7h18M5 7 2 13h6L5 7Zm14 0-3 6h6l-3-6ZM7 21h10" />
@@ -115,6 +139,7 @@ export function useBalancer(
 				)}
 				{label}
 			</Button>
+			</>
 		),
 		panel: open ? (
 			<div

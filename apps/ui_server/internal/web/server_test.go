@@ -11,7 +11,17 @@ import (
 	"testing"
 
 	"github.com/aurceive/gcsim-rostering/apps/ui_server/internal/engine"
+	"github.com/aurceive/gcsim-rostering/apps/ui_server/internal/standards"
 )
+
+func testStandards(t *testing.T) *standards.Standards {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "ui_server.yaml")
+	if err := os.WriteFile(path, []byte("optimizer_variants:\n  - name: kqms\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	return standards.Load(path)
+}
 
 func TestLocalRequestsAndEndpoints(t *testing.T) {
 	root := t.TempDir()
@@ -31,7 +41,7 @@ func TestLocalRequestsAndEndpoints(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = manager.Close() })
-	server, err := New(manager, static, logger)
+	server, err := New(manager, static, logger, testStandards(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +104,7 @@ func TestEngineRouting(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = manager.Close() })
-	server, err := New(manager, static, logger)
+	server, err := New(manager, static, logger, testStandards(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +144,7 @@ func TestEngineRouting(t *testing.T) {
 }
 
 func TestMissingBuild(t *testing.T) {
-	if _, err := New(nil, t.TempDir(), log.New(io.Discard, "", 0)); err == nil {
+	if _, err := New(nil, t.TempDir(), log.New(io.Discard, "", 0), testStandards(t)); err == nil {
 		t.Fatal("missing UI build accepted")
 	}
 }

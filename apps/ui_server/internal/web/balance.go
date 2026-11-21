@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+
+	"github.com/aurceive/gcsim-rostering/apps/ui_server/internal/standards"
 )
 
 type balanceEvent struct {
@@ -37,7 +39,8 @@ func (s *balanceStream) Write(p []byte) (int, error) {
 func (s *Server) balance(w http.ResponseWriter, r *http.Request, name string) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var request struct {
-		Config string `json:"config"`
+		Config  string `json:"config"`
+		Variant string `json:"variant"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, fmt.Sprintf("invalid balance request: %v", err), http.StatusBadRequest)
@@ -47,6 +50,18 @@ func (s *Server) balance(w http.ResponseWriter, r *http.Request, name string) {
 		http.Error(w, "config is empty", http.StatusBadRequest)
 		return
 	}
+	variant, err := s.standards.Find(request.Variant)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if variant.TalentLevel != nil {
+		request.Config, err = standards.ApplyTalents(request.Config, *variant.TalentLevel)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
 	w.Header().Set("Content-Type", "application/x-ndjson; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	stream := &balanceStream{w: w}
@@ -54,7 +69,7 @@ func (s *Server) balance(w http.ResponseWriter, r *http.Request, name string) {
 		s.log.Printf("start balancer stream: %v", err)
 		return
 	}
-	config, err := s.engines.Balance(r.Context(), name, request.Config, stream)
+	config, err := s.engines.Balance(r.Context(), name, request.Config, variant.Options, stream)
 	event := balanceEvent{Type: "result", Text: config}
 	if err != nil {
 		event = balanceEvent{Type: "error", Text: err.Error()}

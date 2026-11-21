@@ -1,0 +1,14 @@
+# Balancer standards. Copy to input/ui_server/ui_server.yaml and edit.
+# Changes are loaded when ui_server starts. Names must be unique.
+# If optimizer_variants is omitted or empty, the default is kqms.
+optimizer_variants:
+  - name: kqms
+    options: {}
+  # - name: custom
+  #   options:
+  #     talent_level: 9 # Optional: sets all three talents for all characters (1..10).
+  #     total_liquid_substats: 20
+  #     indiv_liquid_cap: 10
+  #     fixed_substats_count: 2
+  #     fine_tune: 1
+  #     show_substat_scalars: 1

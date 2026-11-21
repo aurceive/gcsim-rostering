@@ -9,6 +9,11 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $kqmRoot = Join-Path $repoRoot 'engines\kqmsim'
 $appRoot = Join-Path $repoRoot 'apps\ui_server'
+$settings = Join-Path $repoRoot 'input\ui_server\ui_server.yaml'
+if (-not (Test-Path -LiteralPath $settings)) {
+  Copy-Item -LiteralPath (Join-Path $repoRoot 'input\ui_server\examples\ui_server.example.yaml') -Destination $settings
+  Write-Host "Created balancer settings: $settings"
+}
 
 foreach ($name in @('git', 'go', 'node', 'corepack', 'tar')) {
   if (-not (Get-Command $name -ErrorAction SilentlyContinue)) {
