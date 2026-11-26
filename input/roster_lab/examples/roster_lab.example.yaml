@@ -10,7 +10,7 @@ version: 1 # Required; currently the only supported version.
 
 project:
   name: roster_lab_demo # Required; used in the output filename.
-  target_character: arlecchino # Required; currently only one character.
+  target_character: arlecchino # Optional for team-only growth; otherwise required.
   # sim_config: custom_sim_config.dart # Default: adjacent sim_config.dart (or example).
   # Relative paths are resolved from this YAML file's directory; absolute paths work too.
 
@@ -50,13 +50,19 @@ optimizer_variants:
 
 output:
   directory: output/roster_lab # Default; relative to repository root.
+  # path: output/roster_lab/custom.ods # Explicit output file; replaces default naming.
 
 resume:
   mode: auto # Default; latest ODS within max_age_hours.
   # mode: off # Ignore old results.
   # mode: all # Latest ODS regardless of age.
   max_age_hours: 24 # Default; applies only to auto.
+  strategy: skip # Default.
+  # strategy: better # Recompute all; retain a previous completed result if it is better by target.
+  # strategy: replace # Recompute all and replace previous results.
+  # strategy: ignore # Do not merge previous results.
   # A CLI path is also supported: -resume output/roster_lab/result.ods
+  # path: output/roster_lab/base.ods # Explicit base checkpoint.
   # Completed runs are reused; failed runs are repeated. auto/all prompt when
   # project metadata differs; an explicit path merges without a prompt.
 
@@ -126,10 +132,10 @@ scenarios:
 
   constellations:
     enabled: true
-    scope: character # Default; only target_character is supported.
+    scope: character # Default; currently supports 1..4 configured team characters.
     # scope: team # Reserved; currently rejected.
     # Omit characters to vary target_character from its current C through C6.
-    # One entry only: "<character> [bound] [bound] [+N] [-N]".
+    # 1..4 entries: "<character> [bound] [bound] [+N] [-N]".
     # One bound means baseline..N; two mean lower..upper.
     # +N includes C N; -N excludes it and takes precedence.
     characters:
@@ -137,6 +143,8 @@ scenarios:
       # - arlecchino
       # - arlecchino 4
       # - arlecchino 2 5 +0 -3
+      # - bennett 0 6
+      # - chevreuse 0 6
     max_additional: 1 # Nonnegative cap on additional levels; omit for no cap.
     # max_additional: 0
 

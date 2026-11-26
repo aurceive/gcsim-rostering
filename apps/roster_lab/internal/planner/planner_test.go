@@ -219,6 +219,7 @@ func TestSubstatsPlannerUsesBasePlusTenStatsWithoutOptimization(t *testing.T) {
 			ScenarioBase: domain.ScenarioBase{Enabled: true},
 		}},
 	}
+
 	plans, err := Build(Context{Config: plannerConfig, Project: project})
 	if err != nil {
 		t.Fatal(err)
@@ -234,7 +235,57 @@ func TestSubstatsPlannerUsesBasePlusTenStatsWithoutOptimization(t *testing.T) {
 			t.Fatalf("unexpected iteration mutation: %#v", spec.Mutations)
 		}
 	}
+
 	if !plans[0].Specs[0].Baseline || plans[0].Specs[0].Label != "База" {
 		t.Fatal("base run is missing")
+	}
+}
+
+func TestConstellationPlannerSupportsFourCharacters(t *testing.T) {
+	config := plannerConfig + `
+bennett char lvl=90/90 cons=0 talent=6,6,6;
+chevreuse char lvl=90/90 cons=0 talent=6,6,6;
+furina char lvl=90/90 cons=0 talent=6,6,6;`
+	maxAdditional := 1
+	project := domain.ProjectConfig{
+		Version: domain.FormatVersion,
+		Project: domain.Project{Name: "test", TargetCharacter: "fischl"},
+		Scenarios: domain.Scenarios{Constellations: domain.ConstellationScenario{
+			ScenarioBase:  domain.ScenarioBase{Enabled: true},
+			Characters:    []string{"fischl 0 1", "bennett 0 1", "chevreuse 0 1", "furina 0 1"},
+			MaxAdditional: &maxAdditional,
+		}},
+	}
+	plans, err := Build(Context{Config: config, Project: project})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plans) != 1 || len(plans[0].Specs) != 5 {
+		t.Fatalf("expected baseline plus four single-constellation upgrades, got %#v", plans)
+	}
+	for _, spec := range plans[0].Specs {
+		if len(spec.Mutations) != 4 {
+			t.Fatalf("expected four character mutations: %#v", spec)
+		}
+	}
+}
+
+func TestGrowthSupportsTeamOnlyRun(t *testing.T) {
+	project := domain.ProjectConfig{
+		Version: domain.FormatVersion,
+		Project: domain.Project{Name: "test"},
+		Scenarios: domain.Scenarios{Growth: domain.GrowthScenario{
+			ScenarioBase: domain.ScenarioBase{Enabled: true},
+		}},
+	}
+	plans, err := Build(Context{Config: plannerConfig, Project: project})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plans) != 1 || len(plans[0].Specs) != 1 {
+		t.Fatalf("unexpected team-only plans: %#v", plans)
+	}
+	if plans[0].Specs[0].Target != domain.TargetTeamDPS {
+		t.Fatalf("team-only growth target is %q", plans[0].Specs[0].Target)
 	}
 }

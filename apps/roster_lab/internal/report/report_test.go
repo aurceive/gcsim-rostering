@@ -103,11 +103,20 @@ func TestScenarioResultsSortByTargetExceptConstellations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if workbook.Sheets[1].Rows[2][1] != "high" {
-		t.Fatalf("growth is not target-sorted: %#v", workbook.Sheets[1].Rows)
+	growthIndex, constellationIndex := -1, -1
+	for i, sheet := range workbook.Sheets {
+		if sheet.Name == "Growth" {
+			growthIndex = i
+		}
+		if sheet.Name == "Constellations Summary" {
+			constellationIndex = i
+		}
 	}
-	if workbook.Sheets[2].Rows[2][1] != "C0" {
-		t.Fatalf("constellation order changed: %#v", workbook.Sheets[2].Rows)
+	if growthIndex < 0 || workbook.Sheets[growthIndex].Rows[2][1] != "high" {
+		t.Fatalf("growth is not target-sorted: %#v", workbook.Sheets)
+	}
+	if constellationIndex < 0 || workbook.Sheets[constellationIndex].Rows[2][2] != "C0" {
+		t.Fatalf("constellation order changed: %#v", workbook.Sheets)
 	}
 }
 
@@ -121,6 +130,7 @@ func TestScenarioTitleShowsStableCharacterLevelAndConstellation(t *testing.T) {
 	if err := report.Write(path, plan, map[string]domain.RunResult{}, resume.Checkpoint{ProjectName: "test"}, sources); err != nil {
 		t.Fatal(err)
 	}
+
 	workbook, err := ods.Read(path)
 	if err != nil {
 		t.Fatal(err)
@@ -128,6 +138,13 @@ func TestScenarioTitleShowsStableCharacterLevelAndConstellation(t *testing.T) {
 	title := workbook.Sheets[1].Rows[0]
 	if title[2] != "Fischl 80/90 C6" || title[3] != "Bennett C5" {
 		t.Fatalf("character state is missing from title row: %#v", title)
+	}
+}
+
+func TestDefaultPathUsesRLShortName(t *testing.T) {
+	path := report.DefaultPath(`output\roster_lab`, "demo")
+	if !strings.Contains(filepath.Base(path), "_rl_demo.ods") {
+		t.Fatalf("unexpected report filename: %s", path)
 	}
 }
 
@@ -149,16 +166,16 @@ func TestAllScenarioConfigSheetsFollowTechnical(t *testing.T) {
 	for _, sheet := range workbook.Sheets {
 		names = append(names, sheet.Name)
 	}
-	if strings.Join(names, ",") != "Run Summary,Growth,Technical,Growth Config" {
+	if strings.Join(names, ",") != "Run Summary,Growth Summary,Growth,Technical,Growth Summary Config,Growth Config" {
 		t.Fatalf("unexpected sheet layout: %v", names)
 	}
-	for _, value := range workbook.Sheets[1].Rows[2] {
+	for _, value := range workbook.Sheets[2].Rows[2] {
 		if value == "config" {
 			t.Fatal("plain Growth sheet contains simulator config")
 		}
 	}
 	found := false
-	for _, value := range workbook.Sheets[3].Rows[2] {
+	for _, value := range workbook.Sheets[5].Rows[2] {
 		found = found || value == "config"
 	}
 	if !found {

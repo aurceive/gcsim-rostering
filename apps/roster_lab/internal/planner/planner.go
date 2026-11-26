@@ -14,10 +14,11 @@ import (
 )
 
 type Context struct {
-	Config   string
-	Project  domain.ProjectConfig
-	Metadata engine.Metadata
-	Sources  map[string][]string
+	Config              string
+	Project             domain.ProjectConfig
+	Metadata            engine.Metadata
+	Sources             map[string][]string
+	WeaponClassOverride string
 }
 
 func Build(ctx Context) ([]domain.Plan, error) {
@@ -59,19 +60,17 @@ func buildWeapons(ctx Context) (domain.Plan, bool, error) {
 	if !ok {
 		weapon = equipped
 	}
-	weaponInfo, ok := ctx.Metadata.Weapons[weapon]
-	if ok && weaponInfo.WeaponClass != charInfo.WeaponClass {
-		// Keep the current character metadata class, matching the weapon_roster default.
-		weaponInfo.WeaponClass = charInfo.WeaponClass
+	weaponClass := charInfo.WeaponClass
+	if ctx.WeaponClassOverride != "" {
+		weaponClass = ctx.WeaponClassOverride
 	}
-
 	minRarity := cfg.MinimumRarity
 	if minRarity <= 0 {
 		minRarity = 3
 	}
 	all := make([]string, 0)
 	for key, item := range ctx.Metadata.Weapons {
-		if item.WeaponClass == charInfo.WeaponClass && item.Rarity >= minRarity {
+		if item.WeaponClass == weaponClass && item.Rarity >= minRarity {
 			all = append(all, key)
 		}
 	}
@@ -82,7 +81,7 @@ func buildWeapons(ctx Context) (domain.Plan, bool, error) {
 		}
 		return all[i] < all[j]
 	})
-	requests, err := resolveWeapons(cfg.Items.Items, ctx.Metadata, charInfo.WeaponClass)
+	requests, err := resolveWeapons(cfg.Items.Items, ctx.Metadata, weaponClass)
 	if err != nil {
 		return domain.Plan{}, true, fmt.Errorf("weapons: %w", err)
 	}
@@ -113,7 +112,7 @@ func buildWeapons(ctx Context) (domain.Plan, bool, error) {
 	available := strings.TrimSpace(cfg.Available)
 	availableRefine := 0
 	if available != "" {
-		refs, err := resolveWeapons([]string{available}, ctx.Metadata, charInfo.WeaponClass)
+		refs, err := resolveWeapons([]string{available}, ctx.Metadata, weaponClass)
 		if err != nil {
 			return domain.Plan{}, true, fmt.Errorf("weapons.available_weapon: %w", err)
 		}
@@ -214,6 +213,9 @@ func buildGrowth(ctx Context) (domain.Plan, bool, error) {
 		return domain.Plan{}, true, fmt.Errorf("growth: %w", err)
 	}
 	plan := domain.Plan{Scenario: "growth"}
+	if ctx.Project.Project.TargetCharacter == "" && target != domain.TargetTeamDPS {
+		return domain.Plan{}, true, fmt.Errorf("growth: team-only mode requires target=team_dps")
+	}
 	for _, level := range levels {
 		for _, mainStats := range stats {
 			spec := domain.RunSpec{
@@ -222,6 +224,9 @@ func buildGrowth(ctx Context) (domain.Plan, bool, error) {
 				SortGroup: level.Name, Label: level.Name + " " + statsLabel(mainStats),
 			}
 			if mainStats != "" {
+				if ctx.Project.Project.TargetCharacter == "" {
+					return domain.Plan{}, true, fmt.Errorf("growth: main_stats requires target_character")
+				}
 				spec.Mutations = []domain.Mutation{{
 					Type: domain.MutationMainStats, Character: ctx.Project.Project.TargetCharacter,
 					Values: []string{mainStats},
@@ -253,40 +258,64 @@ func buildConstellations(ctx Context) (domain.Plan, bool, error) {
 	if scope != domain.ScopeCharacter {
 		return domain.Plan{}, true, fmt.Errorf("constellations: scope %q is reserved for a future team implementation", cfg.Scope)
 	}
-	char := ctx.Project.Project.TargetCharacter
 	entries := cfg.Characters
 	if len(entries) == 0 {
-		entries = []string{char}
+		entries = []string{ctx.Project.Project.TargetCharacter}
 	}
-	baseline, err := configedit.ParseConstellation(ctx.Config, char)
-	if err != nil {
-		return domain.Plan{}, true, err
+	if len(entries) == 0 || len(entries) > 4 {
+		return domain.Plan{}, true, fmt.Errorf("constellations: expected 1..4 characters")
 	}
-	entry, err := parseConstellationEntry(entries[0], baseline)
-	if err != nil {
-		return domain.Plan{}, true, fmt.Errorf("constellations: %w", err)
+	allowed := make(map[string][]int, len(entries))
+	minimums := make(map[string]int, len(entries))
+	chars := make([]string, 0, len(entries))
+	for _, raw := range entries {
+		fields := strings.Fields(raw)
+		if len(fields) == 0 {
+			return domain.Plan{}, true, fmt.Errorf("constellations: empty character entry")
+		}
+		char := fields[0]
+		for _, existing := range chars {
+			if existing == char {
+				return domain.Plan{}, true, fmt.Errorf("constellations: duplicate character %q", char)
+			}
+		}
+		baseline, err := configedit.ParseConstellation(ctx.Config, char)
+		if err != nil {
+			return domain.Plan{}, true, err
+		}
+		entry, err := parseConstellationEntry(raw, baseline)
+		if err != nil {
+			return domain.Plan{}, true, fmt.Errorf("constellations: %w", err)
+		}
+		chars = append(chars, char)
+		allowed[char] = entry.levels
+		minimums[char] = entry.levels[0]
 	}
-	if entry.char != char || len(entries) != 1 {
-		return domain.Plan{}, true, fmt.Errorf("constellations: different target characters are not supported")
-	}
+	combinations := constellationCombinations(chars, allowed, minimums, cfg.MaxAdditional)
 	plan := domain.Plan{Scenario: "constellations"}
 	variants, err := optimizerVariants(ctx.Project.Variants, cfg.Variants, optimize)
 	if err != nil {
 		return domain.Plan{}, true, fmt.Errorf("constellations: %w", err)
 	}
-	for _, level := range entry.levels {
-		if cfg.MaxAdditional != nil && level-baseline > *cfg.MaxAdditional {
-			continue
-		}
+	for _, combination := range combinations {
 		for _, variant := range variants {
+			mutations := make([]domain.Mutation, 0, len(chars))
+			labels := make([]string, 0, len(chars))
+			for _, char := range chars {
+				mutations = append(mutations, domain.Mutation{
+					Type: domain.MutationConstellation, Character: char,
+					Values: []string{strconv.Itoa(combination.Levels[char])},
+				})
+				labels = append(labels, fmt.Sprintf("%s C%d", char, combination.Levels[char]))
+			}
 			spec := domain.RunSpec{
-				Scenario: "constellations", Character: char, Scope: scope, Target: target, Optimize: optimize,
+				Scenario: "constellations", Scope: scope, Target: target, Optimize: optimize,
 				OptimizerOptions: variant.Options, TalentLevel: variant.TalentLevel,
-				Label: fmt.Sprintf("C%d [%s]", level, variant.Name), Baseline: level == baseline,
-				BaselineGroup: variant.Name,
-				Mutations: []domain.Mutation{{
-					Type: domain.MutationConstellation, Character: char, Values: []string{strconv.Itoa(level)},
-				}},
+				Label:    strings.Join(labels, ", ") + " [" + variant.Name + "]",
+				Baseline: combination.Additional == 0, Additional: combination.Additional,
+				LevelsByCharacter: combination.Levels,
+				BaselineGroup:     variant.Name,
+				Mutations:         mutations,
 			}
 			spec.Key = stableKey(spec)
 			plan.Specs = append(plan.Specs, spec)

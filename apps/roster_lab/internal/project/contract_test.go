@@ -27,7 +27,7 @@ func TestExampleIsConfigurationContract(t *testing.T) {
 		"version:", "sim_config:", "target_character:", "name:", "engine_path:",
 		"target:", "optimize_substats:", "directory:",
 		"mode:", "max_age_hours:",
-		"enabled:", "minimum_rarity:", "items:", "append:",
+		"enabled:", "minimum_rarity:", "items:", "append:", "strategy:",
 		"available_weapon:", "optimizer_variants:", "talent_level:",
 		"Global optimizer standards", "every scenario", "\"kqms\"", "main_stats:", "sands:", "goblet:", "circlet:",
 		"Whole team; not passed as an engine option",

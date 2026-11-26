@@ -80,45 +80,190 @@ func summarySheet(plans []domain.Plan, results map[string]domain.RunResult) ods.
 }
 
 func scenarioSheets(plans []domain.Plan, results map[string]domain.RunResult, specs map[string]domain.RunSpec, sources SourceFiles) ([]ods.Sheet, []ods.Sheet) {
-	names := map[string]string{
-		"weapons": "Weapons", "growth": "Growth", "constellations": "Constellations",
-		"talents": "Talents", "levels": "Levels", "sets": "Sets", "substats": "Substats",
-	}
 	var sheets []ods.Sheet
 	var configSheets []ods.Sheet
 	for _, plan := range plans {
-		if plan.Scenario == "weapons" {
+		switch plan.Scenario {
+		case "weapons":
 			sheets = append(sheets, weaponsSheet(plan, results, specs, sources, false))
 			configSheets = append(configSheets, weaponsSheet(plan, results, specs, sources, true))
-			continue
+		case "constellations":
+			summary, full := constellationSheets(plan, results, sources, false)
+			summaryConfig, fullConfig := constellationSheets(plan, results, sources, true)
+			sheets = append(sheets, summary, full)
+			configSheets = append(configSheets, summaryConfig, fullConfig)
+		case "growth":
+			sheets = append(sheets, growthSummarySheet(plan, results, sources, false), standardScenarioSheet(plan, results, sources, false))
+			configSheets = append(configSheets, growthSummarySheet(plan, results, sources, true), standardScenarioSheet(plan, results, sources, true))
+		case "talents":
+			sheets = append(sheets, talentSheet(plan, results, sources, false))
+			configSheets = append(configSheets, talentSheet(plan, results, sources, true))
+		default:
+			sheets = append(sheets, standardScenarioSheet(plan, results, sources, false))
+			configSheets = append(configSheets, standardScenarioSheet(plan, results, sources, true))
 		}
-		headers := []string{"Section", "Variant", "Status", "Team DPS", "Team %", "Char DPS", "Char %", "ER", "Error"}
-		rows := [][]string{headers}
-		configRows := [][]string{append(append([]string(nil), headers[:8]...), "Sim Config", "Error")}
-		teamBase, charBase := baseline(plan.Specs, results)
-		specsToWrite := plan.Specs
-		if plan.Scenario != "constellations" {
-			specsToWrite = sortSpecsByResult(plan.Specs, results)
-		}
-		for _, spec := range specsToWrite {
-			result := results[spec.Key]
-			metricRows := []string{
-				spec.Section, spec.Label, string(result.Status),
-				number(result.TeamDPS), percent(result.TeamDPS, teamBase[spec.BaselineGroup], result.Status),
-				number(result.CharDPS), percent(result.CharDPS, charBase[spec.BaselineGroup], result.Status),
-				float(result.ER),
-			}
-			rows = append(rows, append(append([]string(nil), metricRows...), result.Error))
-			configRows = append(configRows, append(append([]string(nil), metricRows...), result.SimulatorConfig, result.Error))
-		}
-		title := scenarioTitleRow(plan, sources.SimConfig, len(rows[0]))
-		configTitle := scenarioTitleRow(plan, sources.SimConfig, len(configRows[0]))
-		rows = append([][]string{title}, rows...)
-		configRows = append([][]string{configTitle}, configRows...)
-		sheets = append(sheets, ods.Sheet{Name: names[plan.Scenario], Rows: rows})
-		configSheets = append(configSheets, ods.Sheet{Name: names[plan.Scenario] + " Config", Rows: configRows})
 	}
 	return sheets, configSheets
+}
+
+func standardScenarioSheet(plan domain.Plan, results map[string]domain.RunResult, sources SourceFiles, withConfig bool) ods.Sheet {
+	headers := []string{"Section", "Variant", "Status", "Team DPS", "Team %", "Char DPS", "Char %", "ER", "Error"}
+	if withConfig {
+		headers = []string{"Section", "Variant", "Status", "Team DPS", "Team %", "Char DPS", "Char %", "ER", "Sim Config", "Error"}
+	}
+	rows := [][]string{headers}
+	teamBase, charBase := baseline(plan.Specs, results)
+	for _, spec := range sortSpecsByResult(plan.Specs, results) {
+		result := results[spec.Key]
+		row := []string{spec.Section, spec.Label, string(result.Status), number(result.TeamDPS), percent(result.TeamDPS, teamBase[spec.BaselineGroup], result.Status), number(result.CharDPS), percent(result.CharDPS, charBase[spec.BaselineGroup], result.Status), float(result.ER)}
+		if withConfig {
+			row = append(row, result.SimulatorConfig)
+		}
+		rows = append(rows, append(row, result.Error))
+	}
+	rows = append([][]string{scenarioTitleRow(plan, sources.SimConfig, len(rows[0]))}, rows...)
+	name := titleByScenario(plan.Scenario)
+	if withConfig {
+		name += " Config"
+	}
+	return ods.Sheet{Name: name, Rows: rows}
+}
+
+func constellationSheets(plan domain.Plan, results map[string]domain.RunResult, sources SourceFiles, withConfig bool) (ods.Sheet, ods.Sheet) {
+	fullSpecs := append([]domain.RunSpec(nil), plan.Specs...)
+	sort.SliceStable(fullSpecs, func(i, j int) bool {
+		if fullSpecs[i].Additional != fullSpecs[j].Additional {
+			return fullSpecs[i].Additional < fullSpecs[j].Additional
+		}
+		return metric(results[fullSpecs[i].Key], fullSpecs[i].Target) > metric(results[fullSpecs[j].Key], fullSpecs[j].Target)
+	})
+	summaryByKey := make(map[string]domain.RunSpec)
+	var order []string
+	for _, spec := range fullSpecs {
+		key := fmt.Sprintf("%s/%d", spec.BaselineGroup, spec.Additional)
+		if previous, ok := summaryByKey[key]; !ok {
+			order = append(order, key)
+			summaryByKey[key] = spec
+		} else if metric(results[spec.Key], spec.Target) > metric(results[previous.Key], previous.Target) {
+			summaryByKey[key] = spec
+		}
+	}
+	build := func(summary bool) ods.Sheet {
+		headers := []string{"Additional", "Variant", "Label", "Team DPS", "Team %", "Char DPS", "Char %", "Best %", "Error"}
+		if withConfig {
+			headers = append(headers[:8], "Sim Config", "Error")
+		}
+		rows := [][]string{headers}
+		teamBase, charBase := baseline(plan.Specs, results)
+		specs := fullSpecs
+		if summary {
+			specs = nil
+			for _, key := range order {
+				specs = append(specs, summaryByKey[key])
+			}
+		}
+		for _, spec := range specs {
+			result := results[spec.Key]
+			groupBest := 0
+			for _, candidate := range fullSpecs {
+				if candidate.Additional == spec.Additional && candidate.BaselineGroup == spec.BaselineGroup {
+					groupBest = max(groupBest, metric(results[candidate.Key], candidate.Target))
+				}
+			}
+			bestPct := ""
+			if groupBest > 0 && result.Status == domain.RunCompleted {
+				bestPct = fmt.Sprintf("%.1f%%", float64(metric(result, spec.Target))/float64(groupBest)*100)
+			}
+			row := []string{strconv.Itoa(spec.Additional), spec.BaselineGroup, spec.Label, number(result.TeamDPS), percent(result.TeamDPS, teamBase[spec.BaselineGroup], result.Status), number(result.CharDPS), percent(result.CharDPS, charBase[spec.BaselineGroup], result.Status), bestPct}
+			if withConfig {
+				row = append(row, result.SimulatorConfig)
+			}
+			rows = append(rows, append(row, result.Error))
+		}
+		rows = append([][]string{scenarioTitleRow(plan, sources.SimConfig, len(rows[0]))}, rows...)
+		name := "Constellations Full"
+		if summary {
+			name = "Constellations Summary"
+		}
+		if withConfig {
+			name += " Config"
+		}
+		return ods.Sheet{Name: name, Rows: rows}
+	}
+	return build(true), build(false)
+}
+
+func growthSummarySheet(plan domain.Plan, results map[string]domain.RunResult, sources SourceFiles, withConfig bool) ods.Sheet {
+	best := make(map[string]domain.RunSpec)
+	for _, spec := range plan.Specs {
+		key := spec.SortGroup + "/" + spec.BaselineGroup
+		previous, ok := best[key]
+		if !ok || metric(results[spec.Key], spec.Target) > metric(results[previous.Key], previous.Target) {
+			best[key] = spec
+		}
+	}
+	var keys []string
+	for key := range best {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	headers := []string{"Investment", "Variant", "Main Stats", "Team DPS", "Team %", "Char DPS", "Char %", "ER", "Error"}
+	if withConfig {
+		headers = append(headers[:8], "Sim Config", "Error")
+	}
+	rows := [][]string{headers}
+	teamBase, charBase := baseline(plan.Specs, results)
+	for _, key := range keys {
+		spec := best[key]
+		result := results[spec.Key]
+		row := []string{spec.SortGroup, spec.BaselineGroup, mainStatCodes(spec.MainStats), number(result.TeamDPS), percent(result.TeamDPS, teamBase[spec.BaselineGroup], result.Status), number(result.CharDPS), percent(result.CharDPS, charBase[spec.BaselineGroup], result.Status), float(result.ER)}
+		if withConfig {
+			row = append(row, result.SimulatorConfig)
+		}
+		rows = append(rows, append(row, result.Error))
+	}
+	rows = append([][]string{scenarioTitleRow(plan, sources.SimConfig, len(rows[0]))}, rows...)
+	name := "Growth Summary"
+	if withConfig {
+		name += " Config"
+	}
+	return ods.Sheet{Name: name, Rows: rows}
+}
+
+func talentSheet(plan domain.Plan, results map[string]domain.RunResult, sources SourceFiles, withConfig bool) ods.Sheet {
+	headers := []string{"Section", "Talents", "Status", "Team DPS", "Team %", "Char DPS", "Char %", "ER", "Error"}
+	if withConfig {
+		headers = append(headers[:8], "Sim Config", "Error")
+	}
+	rows := [][]string{headers}
+	teamBase, charBase := baseline(plan.Specs, results)
+	for _, section := range []string{"", "auto", "skill", "burst"} {
+		rows = append(rows, []string{section})
+		for _, spec := range plan.Specs {
+			if spec.Section != section {
+				continue
+			}
+			result := results[spec.Key]
+			row := []string{spec.Section, spec.Label, string(result.Status), number(result.TeamDPS), percent(result.TeamDPS, teamBase[spec.BaselineGroup], result.Status), number(result.CharDPS), percent(result.CharDPS, charBase[spec.BaselineGroup], result.Status), float(result.ER)}
+			if withConfig {
+				row = append(row, result.SimulatorConfig)
+			}
+			rows = append(rows, append(row, result.Error))
+		}
+	}
+	rows = append([][]string{scenarioTitleRow(plan, sources.SimConfig, len(rows[0]))}, rows...)
+	name := "Talents"
+	if withConfig {
+		name += " Config"
+	}
+	return ods.Sheet{Name: name, Rows: rows}
+}
+
+func titleByScenario(scenario string) string {
+	if name := map[string]string{"growth": "Growth", "sets": "Sets", "substats": "Substats", "levels": "Levels"}[scenario]; name != "" {
+		return name
+	}
+	return titleCase(strings.ReplaceAll(scenario, "_", " "))
 }
 
 type weaponRow struct {
@@ -453,5 +598,5 @@ func float(value float64) string {
 }
 
 func DefaultPath(outputDir, name string) string {
-	return filepath.Join(outputDir, fmt.Sprintf("%s_roster_lab_%s.ods", time.Now().Format("20060102"), name))
+	return filepath.Join(outputDir, fmt.Sprintf("%s_rl_%s.ods", time.Now().Format("20060102"), name))
 }

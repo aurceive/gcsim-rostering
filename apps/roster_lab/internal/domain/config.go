@@ -44,11 +44,14 @@ type Project struct {
 
 type OutputConfig struct {
 	Directory string `yaml:"directory"`
+	Path      string `yaml:"path"`
 }
 
 type ResumeConfig struct {
 	Mode        string `yaml:"mode"`
 	MaxAgeHours int    `yaml:"max_age_hours"`
+	Strategy    string `yaml:"strategy"`
+	Path        string `yaml:"path"`
 }
 
 type Scenarios struct {
@@ -155,7 +158,15 @@ func (c *ProjectConfig) Validate() error {
 		return fmt.Errorf("project.name is required")
 	}
 	if strings.TrimSpace(c.Project.TargetCharacter) == "" {
-		return fmt.Errorf("project.target_character is required")
+		requiresCharacter := c.Scenarios.Weapons.Enabled ||
+			c.Scenarios.Constellations.Enabled ||
+			c.Scenarios.Talents.Enabled ||
+			c.Scenarios.Levels.Enabled ||
+			c.Scenarios.Sets.Enabled ||
+			c.Scenarios.Substats.Enabled
+		if requiresCharacter || c.Scenarios.Growth.Enabled && len(c.Scenarios.Growth.MainStats.Sands) > 0 {
+			return fmt.Errorf("project.target_character is required by enabled scenarios")
+		}
 	}
 	if strings.TrimSpace(c.Engine) == "" {
 		c.Engine = "gcsim"
@@ -171,6 +182,14 @@ func (c *ProjectConfig) Validate() error {
 	}
 	if c.Resume.MaxAgeHours <= 0 {
 		c.Resume.MaxAgeHours = 24
+	}
+	if c.Resume.Strategy == "" {
+		c.Resume.Strategy = "skip"
+	}
+	switch c.Resume.Strategy {
+	case "skip", "better", "replace", "ignore":
+	default:
+		return fmt.Errorf("resume.strategy must be one of skip, better, replace, ignore")
 	}
 	return nil
 }

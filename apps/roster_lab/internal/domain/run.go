@@ -22,24 +22,26 @@ type Mutation struct {
 }
 
 type RunSpec struct {
-	Key              string         `json:"key"`
-	Scenario         string         `json:"scenario"`
-	Section          string         `json:"section,omitempty"`
-	Character        string         `json:"character,omitempty"`
-	Scope            Scope          `json:"scope"`
-	Target           Target         `json:"target"`
-	Mutations        []Mutation     `json:"mutations,omitempty"`
-	OptimizerOptions map[string]any `json:"optimizer_options,omitempty"`
-	TalentLevel      *int           `json:"talent_level,omitempty"`
-	Optimize         bool           `json:"optimize_substats"`
-	Label            string         `json:"label"`
-	Baseline         bool           `json:"baseline,omitempty"`
-	BaselineGroup    string         `json:"baseline_group,omitempty"`
-	SortGroup        string         `json:"sort_group,omitempty"`
-	VariantName      string         `json:"variant_name,omitempty"`
-	DisplayName      string         `json:"display_name,omitempty"`
-	WeaponRefine     int            `json:"weapon_refine,omitempty"`
-	MainStats        string         `json:"main_stats,omitempty"`
+	Key               string         `json:"key"`
+	Scenario          string         `json:"scenario"`
+	Section           string         `json:"section,omitempty"`
+	Character         string         `json:"character,omitempty"`
+	Scope             Scope          `json:"scope"`
+	Target            Target         `json:"target"`
+	Mutations         []Mutation     `json:"mutations,omitempty"`
+	OptimizerOptions  map[string]any `json:"optimizer_options,omitempty"`
+	TalentLevel       *int           `json:"talent_level,omitempty"`
+	Optimize          bool           `json:"optimize_substats"`
+	Label             string         `json:"label"`
+	Baseline          bool           `json:"baseline,omitempty"`
+	BaselineGroup     string         `json:"baseline_group,omitempty"`
+	SortGroup         string         `json:"sort_group,omitempty"`
+	VariantName       string         `json:"variant_name,omitempty"`
+	DisplayName       string         `json:"display_name,omitempty"`
+	WeaponRefine      int            `json:"weapon_refine,omitempty"`
+	MainStats         string         `json:"main_stats,omitempty"`
+	Additional        int            `json:"additional,omitempty"`
+	LevelsByCharacter map[string]int `json:"levels_by_character,omitempty"`
 }
 
 type RunStatus string

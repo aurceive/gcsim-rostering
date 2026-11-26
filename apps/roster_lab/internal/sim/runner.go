@@ -87,11 +87,13 @@ func (r Runner) Run(ctx context.Context, baseConfig string, spec domain.RunSpec,
 	if strings.TrimSpace(engineResult.ConfigFile) == "" {
 		return failedResult(result, started, fmt.Errorf("engine result missing config_file"))
 	}
-	if charIndex < 0 || charIndex >= len(engineResult.Statistics.CharacterDPS) || engineResult.Statistics.CharacterDPS[charIndex].Mean == nil {
-		return failedResult(result, started, fmt.Errorf("engine result missing character_dps[%d]", charIndex))
-	}
-	if charIndex >= len(engineResult.CharacterDetails) || len(engineResult.CharacterDetails[charIndex].Snapshot) <= 7 {
-		return failedResult(result, started, fmt.Errorf("engine result missing character_details[%d].snapshot[7]", charIndex))
+	if charIndex >= 0 {
+		if charIndex >= len(engineResult.Statistics.CharacterDPS) || engineResult.Statistics.CharacterDPS[charIndex].Mean == nil {
+			return failedResult(result, started, fmt.Errorf("engine result missing character_dps[%d]", charIndex))
+		}
+		if charIndex >= len(engineResult.CharacterDetails) || len(engineResult.CharacterDetails[charIndex].Snapshot) <= 7 {
+			return failedResult(result, started, fmt.Errorf("engine result missing character_details[%d].snapshot[7]", charIndex))
+		}
 	}
 	result.Status = domain.RunCompleted
 	result.TeamDPS = int(math.Round(*engineResult.Statistics.DPS.Mean))

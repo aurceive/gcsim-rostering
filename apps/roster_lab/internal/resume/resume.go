@@ -151,3 +151,16 @@ func ResultsByKey(checkpoint Checkpoint) map[string]domain.RunResult {
 	}
 	return result
 }
+
+func BetterResult(candidate, previous domain.RunResult, target domain.Target) bool {
+	if previous.Status != domain.RunCompleted {
+		return candidate.Status == domain.RunCompleted
+	}
+	if candidate.Status != domain.RunCompleted {
+		return false
+	}
+	if target == domain.TargetCharDPS {
+		return candidate.CharDPS > previous.CharDPS
+	}
+	return candidate.TeamDPS > previous.TeamDPS
+}

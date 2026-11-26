@@ -21,6 +21,7 @@ go -C apps\roster_lab build -o roster_lab.exe .\cmd\roster_lab
 ```powershell
 apps\roster_lab\roster_lab.exe
 apps\roster_lab\roster_lab.exe -useExamples
+apps\roster_lab\roster_lab.exe -configTable output\weapon_roster\result.xlsx
 ```
 
 Входы располагаются в:
@@ -52,6 +53,20 @@ apps\roster_lab\roster_lab.exe -resume output\roster_lab\result.ods
 
 Завершённые прогоны пропускаются. `failed` считается синонимом «не посчитано» и запускается повторно. При несовпадении исходного YAML или `sim_config.dart` в режимах `auto`/`all` приложение запрашивает подтверждение слияния. Для явного пути подтверждение не требуется.
 
+`resume.strategy` объединяет прежние resume-флаги:
+
+- `skip` — пропустить completed;
+- `better` — пересчитать и сохранить лучший по target;
+- `replace` — пересчитать и заменить;
+- `ignore` — не читать прежний файл.
+
+Копирование конфигов из XLSX и архивирование ODS:
+
+```powershell
+scripts\roster_lab\copy-configs-from-table.ps1 -TablePath output\weapon_roster\result.xlsx
+scripts\roster_lab\sort-output.ps1
+```
+
 ## Формат вывода
 
 Результат — один автономно созданный ODS-файл:
@@ -65,8 +80,8 @@ apps\roster_lab\roster_lab.exe -resume output\roster_lab\result.ods
 
 ## Текущие ограничения
 
-- поддерживается один целевой персонаж;
+- один целевой персонаж используется для character-сценариев; constellation поддерживает 1–4 персонажа, а growth допускает team-only режим;
 - team scope зарезервирован в формате, но пока отклоняется;
 - прогоны выполняются последовательно;
-- поддержка XLSX отсутствует;
+- XLSX поддерживается как вход через `-configTable`; результат остаётся ODS;
 - внешний редактор или LibreOffice для генерации не требуется.

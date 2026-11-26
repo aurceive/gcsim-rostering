@@ -262,6 +262,41 @@ type artifactCombinationItem struct {
 	Count int
 }
 
+type constellationCombination struct {
+	Levels     map[string]int
+	Additional int
+}
+
+func constellationCombinations(chars []string, allowed map[string][]int, minimums map[string]int, max *int) []constellationCombination {
+	var result []constellationCombination
+	current := make(map[string]int, len(chars))
+	var visit func(int, int)
+	visit = func(index, additional int) {
+		if index == len(chars) {
+			levels := make(map[string]int, len(current))
+			for char, level := range current {
+				levels[char] = level
+			}
+			result = append(result, constellationCombination{Levels: levels, Additional: additional})
+			return
+		}
+		char := chars[index]
+		for _, level := range allowed[char] {
+			next := additional + level - minimums[char]
+			if max != nil && next > *max {
+				continue
+			}
+			current[char] = level
+			visit(index+1, next)
+		}
+	}
+	visit(0, 0)
+	sort.SliceStable(result, func(i, j int) bool {
+		return result[i].Additional < result[j].Additional
+	})
+	return result
+}
+
 func resolveArtifactSets(raw []string, metadata engine.Metadata) ([]artifactRequest, error) {
 	names := make(map[string]string, len(metadata.ArtifactNames))
 	ambiguous := make(map[string]bool)
