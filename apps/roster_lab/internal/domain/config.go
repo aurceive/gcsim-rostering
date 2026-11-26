@@ -58,6 +58,7 @@ type Scenarios struct {
 	Talents        TalentScenario        `yaml:"talents"`
 	Levels         LevelScenario         `yaml:"levels"`
 	Sets           SetsScenario          `yaml:"sets"`
+	Substats       SubstatsScenario      `yaml:"substats"`
 }
 
 type ScenarioBase struct {
@@ -139,6 +140,11 @@ type SetsScenario struct {
 	ScenarioBase `yaml:",inline"`
 	Scope        string   `yaml:"scope"`
 	Items        []string `yaml:"items"`
+}
+
+type SubstatsScenario struct {
+	ScenarioBase `yaml:",inline"`
+	Iterations   int `yaml:"iterations"`
 }
 
 func (c *ProjectConfig) Validate() error {

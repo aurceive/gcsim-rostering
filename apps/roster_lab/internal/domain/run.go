@@ -11,6 +11,8 @@ const (
 	MutationTalent        MutationType = "talent"
 	MutationLevel         MutationType = "level"
 	MutationSets          MutationType = "sets"
+	MutationIteration     MutationType = "iteration"
+	MutationSubstat       MutationType = "substat"
 )
 
 type Mutation struct {

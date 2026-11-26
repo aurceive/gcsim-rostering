@@ -78,8 +78,8 @@ scenarios:
     # engine keys or exact Russian names, followed by zero or more refines.
     # Without refines: 3* R5, 5* R1, 4* R5 for non-limited sources, else R1+R5.
     items:
-      - deathmatch 1
-      # - deathmatch 1 5
+      # - deathmatch 1
+      - deathmatch 1 5
       # - Небесное крыло 2 3
 
     # Alternative map form; append: true adds to the default selection.
@@ -111,7 +111,7 @@ scenarios:
         # - cr=0.311
 
   growth:
-    # enabled: true
+    enabled: true
     # optimizer_variants:
     #   - name: growth-only
     #     options:
@@ -125,7 +125,7 @@ scenarios:
     #   circlet: [cr=0.311, cd=0.622]
 
   constellations:
-    # enabled: true
+    enabled: true
     scope: character # Default; only target_character is supported.
     # scope: team # Reserved; currently rejected.
     # Omit characters to vary target_character from its current C through C6.
@@ -140,7 +140,7 @@ scenarios:
     # max_additional: 0
 
   sets:
-    # enabled: true
+    enabled: true
     scope: character # Default; scope: team is reserved and rejected.
     # Engine keys or exact Russian names; no count means 4 pieces.
     # Counts are allowed sizes; combinations must total exactly 4 pieces.
@@ -149,14 +149,24 @@ scenarios:
       - goldentroupe
       - Изумрудная тень 2 4
 
+  substats:
+    enabled: true
+    # This scenario always runs without -substatOptimFull. If optimize_substats
+    # is explicitly set to true, configuration is rejected.
+    optimize_substats: false
+    iterations: 10000 # Default; locally overrides the sim config's iteration.
+    # Each row adds one roll to target_character, producing baseline plus:
+    # DEF%, DEF, HP, HP%, ATK, ATK%, ER, EM, CR, CD.
+    # Results are sorted by DPS gain relative to the baseline.
+
   levels:
-    # enabled: true
+    enabled: true
     scope: character # Default; scope: team is reserved and rejected.
     # Fixed rows: 80/80 (talents 8-8-8), 80/90, 90/90, 95/95, 100/100.
     # 90/90 is the 100% baseline.
 
   talents:
-    # enabled: true
+    enabled: true
     scope: character # Default; scope: team is reserved and rejected.
     matrix: default # Default and currently the only supported matrix.
     # Base: 1-1-1, 6-6-6, 8-8-8, 9-9-9, 10-10-10.

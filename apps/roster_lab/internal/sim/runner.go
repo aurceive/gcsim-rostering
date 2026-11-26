@@ -164,6 +164,20 @@ func applyMutations(config string, spec domain.RunSpec) (string, error) {
 			config, err = configedit.SetLevel(config, mutation.Character, mutation.Values[0])
 		case domain.MutationSets:
 			config, err = configedit.SetSets(config, mutation.Character, mutation.Values)
+		case domain.MutationIteration:
+			if len(mutation.Values) != 1 {
+				return "", fmt.Errorf("iteration mutation requires one value")
+			}
+			iterations, parseErr := strconv.Atoi(mutation.Values[0])
+			if parseErr != nil {
+				return "", parseErr
+			}
+			config, err = configedit.SetIterations(config, iterations)
+		case domain.MutationSubstat:
+			if len(mutation.Values) != 1 {
+				return "", fmt.Errorf("substat mutation requires one value")
+			}
+			config, err = configedit.AddSubstat(config, mutation.Character, mutation.Values[0])
 		default:
 			return "", fmt.Errorf("unsupported mutation %q", mutation.Type)
 		}

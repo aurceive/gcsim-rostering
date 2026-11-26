@@ -176,6 +176,7 @@ func TestSetsPlannerBuildsAllFourPieceCombinationsWithRussianLabels(t *testing.T
 			},
 		}},
 	}
+
 	metadata := engine.Metadata{
 		Artifacts: map[string]struct{}{
 			"goldentroupe": {}, "viridescentvenerer": {},
@@ -203,7 +204,37 @@ func TestSetsPlannerBuildsAllFourPieceCombinationsWithRussianLabels(t *testing.T
 			t.Fatalf("engine keys leaked into label: %q", spec.Label)
 		}
 	}
+
 	if !foundMixed {
 		t.Fatal("missing 2pc + 2pc combination")
+	}
+}
+
+func TestSubstatsPlannerUsesBasePlusTenStatsWithoutOptimization(t *testing.T) {
+	project := domain.ProjectConfig{
+		Version:  domain.FormatVersion,
+		Project:  domain.Project{Name: "test", TargetCharacter: "fischl"},
+		Optimize: func() *bool { value := true; return &value }(),
+		Scenarios: domain.Scenarios{Substats: domain.SubstatsScenario{
+			ScenarioBase: domain.ScenarioBase{Enabled: true},
+		}},
+	}
+	plans, err := Build(Context{Config: plannerConfig, Project: project})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plans) != 1 || len(plans[0].Specs) != 11 {
+		t.Fatalf("expected baseline plus ten substats, got %#v", plans)
+	}
+	for _, spec := range plans[0].Specs {
+		if spec.Optimize {
+			t.Fatal("substats must not use substat optimization")
+		}
+		if spec.Mutations[0].Type != domain.MutationIteration || spec.Mutations[0].Values[0] != "10000" {
+			t.Fatalf("unexpected iteration mutation: %#v", spec.Mutations)
+		}
+	}
+	if !plans[0].Specs[0].Baseline || plans[0].Specs[0].Label != "База" {
+		t.Fatal("base run is missing")
 	}
 }

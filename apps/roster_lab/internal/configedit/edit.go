@@ -8,10 +8,11 @@ import (
 )
 
 var (
-	talentToken = regexp.MustCompile(`\btalent=\s*[0-9]+\s*,\s*[0-9]+\s*,\s*[0-9]+\b`)
-	consToken   = regexp.MustCompile(`\bcons=[0-9]+\b`)
-	refineToken = regexp.MustCompile(`\s+refine=[0-9]+`)
-	levelToken  = regexp.MustCompile(`\blvl=\d+/\d+\b`)
+	talentToken    = regexp.MustCompile(`\btalent=\s*[0-9]+\s*,\s*[0-9]+\s*,\s*[0-9]+\b`)
+	consToken      = regexp.MustCompile(`\bcons=[0-9]+\b`)
+	refineToken    = regexp.MustCompile(`\s+refine=[0-9]+`)
+	levelToken     = regexp.MustCompile(`\blvl=\d+/\d+\b`)
+	iterationToken = regexp.MustCompile(`\biteration=\d+\b`)
 )
 
 func CharacterOrder(config string) []string {
@@ -153,6 +154,49 @@ func SetSets(config, char string, sets []string) (string, error) {
 	}
 	filtered = append(filtered[:insertAt], append(added, filtered[insertAt:]...)...)
 	return strings.Join(filtered, "\n"), nil
+}
+
+func AddSubstat(config, char, stat string) (string, error) {
+	fields := strings.Fields(stat)
+	if len(fields) != 1 || !strings.Contains(fields[0], "=") {
+		return "", fmt.Errorf("substat must be a single key=value token, got %q", stat)
+	}
+	lines := strings.Split(config, "\n")
+	prefix := regexp.MustCompile(`^` + regexp.QuoteMeta(char) + `\s+add\s+stats\s+`)
+	for i, line := range lines {
+		if !prefix.MatchString(strings.TrimSpace(line)) {
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		// Main-stat lines start with the fixed weapon flower/plume values.
+		if strings.Contains(trimmed, " hp=4780 ") || strings.Contains(trimmed, " hp=3571 ") {
+			continue
+		}
+		semicolon := strings.Index(line, ";")
+		if semicolon < 0 {
+			lines[i] = strings.TrimRight(line, " \t") + " " + fields[0]
+		} else {
+			lines[i] = line[:semicolon] + " " + fields[0] + line[semicolon:]
+		}
+		return strings.Join(lines, "\n"), nil
+	}
+	return "", fmt.Errorf("substat line for character %q not found", char)
+}
+
+func SetIterations(config string, iterations int) (string, error) {
+	if iterations <= 0 {
+		return "", fmt.Errorf("iterations must be positive, got %d", iterations)
+	}
+	lines := strings.Split(config, "\n")
+	for i, line := range lines {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) == 0 || fields[0] != "options" || !iterationToken.MatchString(line) {
+			continue
+		}
+		lines[i] = iterationToken.ReplaceAllString(line, fmt.Sprintf("iteration=%d", iterations))
+		return strings.Join(lines, "\n"), nil
+	}
+	return "", fmt.Errorf("options line with iteration token not found")
 }
 
 func SetConstellation(config, char string, level int) (string, error) {

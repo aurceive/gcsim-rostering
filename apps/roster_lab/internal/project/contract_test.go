@@ -33,6 +33,7 @@ func TestExampleIsConfigurationContract(t *testing.T) {
 		"Whole team; not passed as an engine option",
 		"scope: character", "scope: team", "characters:", "max_additional:",
 		"sets:", "goldentroupe", "Изумрудная тень 2 4",
+		"substats:", "iterations: 10000", "DPS gain relative to the baseline",
 		"levels:", "80/80", "80/90", "90/90", "95/95", "100/100",
 		"matrix:", "1-1-1", "6-6-6", "10-10-10",
 		"mode: auto", "mode: off", "mode: all", "max_age_hours",
@@ -50,5 +51,14 @@ func TestExampleIsConfigurationContract(t *testing.T) {
 	}
 	if loaded.Config.Project.SimConfig != "sim_config.example.dart" {
 		t.Fatalf("unexpected implicit example config: %q", loaded.Config.Project.SimConfig)
+	}
+	if loaded.Config.Scenarios.Weapons.Enabled ||
+		loaded.Config.Scenarios.Growth.Enabled ||
+		loaded.Config.Scenarios.Constellations.Enabled ||
+		loaded.Config.Scenarios.Sets.Enabled ||
+		loaded.Config.Scenarios.Substats.Enabled ||
+		loaded.Config.Scenarios.Levels.Enabled ||
+		loaded.Config.Scenarios.Talents.Enabled {
+		t.Fatal("all contract scenarios must be disabled by default")
 	}
 }

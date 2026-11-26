@@ -23,7 +23,7 @@ type Context struct {
 func Build(ctx Context) ([]domain.Plan, error) {
 	var plans []domain.Plan
 	builders := []func(Context) (domain.Plan, bool, error){
-		buildWeapons, buildGrowth, buildConstellations, buildTalents, buildLevels, buildSets,
+		buildWeapons, buildGrowth, buildConstellations, buildTalents, buildLevels, buildSets, buildSubstats,
 	}
 	for _, build := range builders {
 		plan, enabled, err := build(ctx)
@@ -451,6 +451,70 @@ func buildSets(ctx Context) (domain.Plan, bool, error) {
 			spec.Key = stableKey(spec)
 			plan.Specs = append(plan.Specs, spec)
 		}
+	}
+	return plan, true, nil
+}
+
+func buildSubstats(ctx Context) (domain.Plan, bool, error) {
+	cfg := ctx.Project.Scenarios.Substats
+	if !cfg.Enabled {
+		return domain.Plan{}, false, nil
+	}
+	targetName := cfg.Target
+	if targetName == "" {
+		targetName = ctx.Project.Target
+	}
+	target, err := domain.ParseTarget(targetName)
+	if err != nil {
+		return domain.Plan{}, true, fmt.Errorf("substats: %w", err)
+	}
+	if cfg.Optimize != nil && *cfg.Optimize {
+		return domain.Plan{}, true, fmt.Errorf("substats: optimize_substats must remain false")
+	}
+	iterations := cfg.Iterations
+	if iterations < 0 {
+		return domain.Plan{}, true, fmt.Errorf("substats: iterations must be positive")
+	}
+	if iterations == 0 {
+		iterations = 10000
+	}
+	char := ctx.Project.Project.TargetCharacter
+	plan := domain.Plan{Scenario: "substats"}
+	base := domain.RunSpec{
+		Scenario: "substats", Character: char, Scope: domain.ScopeCharacter,
+		Target: target, Optimize: false, Label: "База", Baseline: true,
+		Mutations: []domain.Mutation{{
+			Type: domain.MutationIteration, Values: []string{strconv.Itoa(iterations)},
+		}},
+	}
+	base.Key = stableKey(base)
+	plan.Specs = append(plan.Specs, base)
+	substats := []struct {
+		label string
+		token string
+	}{
+		{"DEF%", "def%=0.062"},
+		{"DEF", "def=19.68"},
+		{"HP", "hp=253.94"},
+		{"HP%", "hp%=0.0496"},
+		{"ATK", "atk=16.54"},
+		{"ATK%", "atk%=0.0496"},
+		{"ER", "er=0.0551"},
+		{"EM", "em=19.82"},
+		{"CR", "cr=0.0331"},
+		{"CD", "cd=0.0662"},
+	}
+	for _, substat := range substats {
+		spec := domain.RunSpec{
+			Scenario: "substats", Character: char, Scope: domain.ScopeCharacter,
+			Target: target, Optimize: false, Label: "+" + substat.label,
+			Mutations: []domain.Mutation{
+				{Type: domain.MutationIteration, Values: []string{strconv.Itoa(iterations)}},
+				{Type: domain.MutationSubstat, Character: char, Values: []string{substat.token}},
+			},
+		}
+		spec.Key = stableKey(spec)
+		plan.Specs = append(plan.Specs, spec)
 	}
 	return plan, true, nil
 }

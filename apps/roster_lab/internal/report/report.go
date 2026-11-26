@@ -75,14 +75,14 @@ func summarySheet(plans []domain.Plan, results map[string]domain.RunResult) ods.
 func scenarioSheets(plans []domain.Plan, results map[string]domain.RunResult, specs map[string]domain.RunSpec) []ods.Sheet {
 	names := map[string]string{
 		"weapons": "Weapons", "growth": "Growth", "constellations": "Constellations",
-		"talents": "Talents", "levels": "Levels", "sets": "Sets",
+		"talents": "Talents", "levels": "Levels", "sets": "Sets", "substats": "Substats",
 	}
 	var sheets []ods.Sheet
 	for _, plan := range plans {
 		rows := [][]string{{"Section", "Variant", "Status", "Team DPS", "Team %", "Char DPS", "Char %", "ER", "Sim Config", "Error"}}
 		teamBase, charBase := baseline(plan.Specs, results)
 		specsToWrite := plan.Specs
-		if plan.Scenario == "sets" {
+		if plan.Scenario == "sets" || plan.Scenario == "substats" {
 			specsToWrite = sortSpecsByResult(plan.Specs, results)
 		}
 		for _, spec := range specsToWrite {
