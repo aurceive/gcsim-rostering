@@ -168,7 +168,9 @@ func buildWeapons(ctx Context) (domain.Plan, bool, error) {
 					spec := domain.RunSpec{
 						Scenario: "weapons", Character: char, Scope: domain.ScopeCharacter, Target: target,
 						Optimize: optimize, OptimizerOptions: variant.Options, TalentLevel: variant.TalentLevel,
-						SortGroup: weaponKey + "/r" + strconv.Itoa(refine) + "/" + variant.Name,
+						SortGroup:   weaponKey + "/r" + strconv.Itoa(refine) + "/" + variant.Name,
+						VariantName: variant.Name, DisplayName: ctx.Metadata.WeaponNames[weaponKey],
+						WeaponRefine: refine, MainStats: stats,
 						Mutations: []domain.Mutation{{
 							Type: domain.MutationWeapon, Character: char,
 							Values: []string{weaponKey, strconv.Itoa(refine)},

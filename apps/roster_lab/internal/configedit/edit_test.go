@@ -75,6 +75,7 @@ func TestAddSubstatAndSetIterations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	output, err = SetIterations(output, 10000)
 	if err != nil {
 		t.Fatal(err)
@@ -84,5 +85,13 @@ func TestAddSubstatAndSetIterations(t *testing.T) {
 	}
 	if !strings.Contains(output, "iteration=10000") || strings.Contains(output, "iteration=1000;") {
 		t.Fatalf("iterations were not replaced:\n%s", output)
+	}
+}
+
+func TestCharacterStates(t *testing.T) {
+	input := "fischl char lvl=90/90 cons=6 talent=9,9,9;\nbennett char lvl=80/90 cons=5 talent=8,8,8;"
+	states := CharacterStates(input)
+	if len(states) != 2 || states[0].Level != "90/90" || states[1].Constellation != 5 {
+		t.Fatalf("unexpected character states: %#v", states)
 	}
 }

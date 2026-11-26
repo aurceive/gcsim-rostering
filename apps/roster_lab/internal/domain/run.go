@@ -36,6 +36,10 @@ type RunSpec struct {
 	Baseline         bool           `json:"baseline,omitempty"`
 	BaselineGroup    string         `json:"baseline_group,omitempty"`
 	SortGroup        string         `json:"sort_group,omitempty"`
+	VariantName      string         `json:"variant_name,omitempty"`
+	DisplayName      string         `json:"display_name,omitempty"`
+	WeaponRefine     int            `json:"weapon_refine,omitempty"`
+	MainStats        string         `json:"main_stats,omitempty"`
 }
 
 type RunStatus string

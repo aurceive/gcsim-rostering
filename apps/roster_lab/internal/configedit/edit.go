@@ -228,6 +228,28 @@ func ParseEquippedWeapon(config, char string) (string, error) {
 	return "", fmt.Errorf("weapon line for character %q not found", char)
 }
 
+type CharacterState struct {
+	Key           string
+	Level         string
+	Constellation int
+}
+
+func CharacterStates(config string) []CharacterState {
+	linePattern := regexp.MustCompile(`^(\S+)\s+char\s+lvl=(\d+/\d+)\s+.*?\bcons=(\d+)\b`)
+	var states []CharacterState
+	for _, line := range strings.Split(config, "\n") {
+		match := linePattern.FindStringSubmatch(strings.TrimSpace(line))
+		if match == nil {
+			continue
+		}
+		constellation, _ := strconv.Atoi(match[3])
+		states = append(states, CharacterState{
+			Key: match[1], Level: strings.TrimSpace(match[2]), Constellation: constellation,
+		})
+	}
+	return states
+}
+
 func validTalent(level int) bool {
 	return level >= 1 && level <= 10
 }

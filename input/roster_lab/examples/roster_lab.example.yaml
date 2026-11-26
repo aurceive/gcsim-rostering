@@ -108,7 +108,7 @@ scenarios:
         # - em=187
       circlet:
         - cd=0.622
-        # - cr=0.311
+        - cr=0.311
 
   growth:
     enabled: true
@@ -132,10 +132,11 @@ scenarios:
     # One entry only: "<character> [bound] [bound] [+N] [-N]".
     # One bound means baseline..N; two mean lower..upper.
     # +N includes C N; -N excludes it and takes precedence.
-    characters: [arlecchino 0 1]
-    # characters: [arlecchino]
-    # characters: [arlecchino 4]
-    # characters: [arlecchino 2 5 +0 -3]
+    characters:
+      - arlecchino 0 1
+      # - arlecchino
+      # - arlecchino 4
+      # - arlecchino 2 5 +0 -3
     max_additional: 1 # Nonnegative cap on additional levels; omit for no cap.
     # max_additional: 0
 

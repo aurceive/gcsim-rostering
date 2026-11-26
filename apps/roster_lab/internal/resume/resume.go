@@ -124,13 +124,13 @@ func Compatible(current, previous Checkpoint) bool {
 
 func ConfirmMerge(reader *bufio.Reader, path string) (bool, error) {
 	fmt.Printf("Resume file differs from the current project: %s\n", path)
-	fmt.Print("Continue and merge it? [y/N]: ")
+	fmt.Print("Continue and merge it? [Y/n]: ")
 	answer, err := reader.ReadString('\n')
 	if err != nil {
 		return false, err
 	}
 	answer = strings.ToLower(strings.TrimSpace(answer))
-	return answer == "y" || answer == "yes", nil
+	return answer == "" || answer == "y" || answer == "yes", nil
 }
 
 func CompletedByKey(checkpoint Checkpoint) map[string]domain.RunResult {
